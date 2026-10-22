@@ -15,7 +15,6 @@
 #ifndef WBE_FILE_SINGLETON_HH
 #define WBE_FILE_SINGLETON_HH
 
-#include "utils/defs.hh"
 #include <atomic>
 #include <cstdint>
 #include <stdexcept>
@@ -32,9 +31,9 @@ template <typename T>
 class ISingleton {
 public:
     ISingleton() {
-        if (instance_count.fetch_add(1, std::memory_order_acq_rel) != 0) {
-            throw std::runtime_error("Failed to construct object: trying to "
-                                     "construct multiple singletons.");
+        uint8_t expected_count = 0;
+        if (!instance_count.compare_exchange_strong(expected_count, 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
+            throw std::runtime_error("Failed to construct object: trying to construct multiple singletons.");
         }
     }
 

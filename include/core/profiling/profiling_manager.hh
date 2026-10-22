@@ -98,9 +98,7 @@ private:
     mutable std::shared_mutex profile_stash_mutex;
     mutable std::unordered_map<ChannelID, std::vector<ProfileData>> profile_stash;
 
-    static const std::string& get_label_name(HashCode p_label) {
-        return EngineCore::get_singleton()->label_manager->get_label_name(p_label);
-    }
+    static const std::string& get_label_name(HashCode p_label);
 };
 
 } // namespace WhiteBirdEngine

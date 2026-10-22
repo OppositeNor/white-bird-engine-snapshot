@@ -1,0 +1,96 @@
+{# Copyright 2025 OppositeNor
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+#}
+-- {{ _prefix }}
+-- Teal declarations of the WBE_REFLECT_SCRIPT types, which the ACP type-checks Teal scripts against: the engine's, and in
+-- targets that build the tests, those of the test executables. Scripts import them as types only, with
+-- `local type wbe = require("wbe")`, which generates no code.
+{% set found = namespace(enums=[], classes=[], enum_names=[], class_names=[], reflected=[]) %}
+{% for enum in metadata.enums %}
+{% set found.reflected = found.reflected + [enum.name] %}
+{% if enum.attribute | select("in", reflect_script) | list | length > 0 %}
+{% set found.enums = found.enums + [enum] %}
+{% set found.enum_names = found.enum_names + [enum.name] %}
+{% endif %}
+{% endfor %}
+{% for class in metadata.classes %}
+{% set found.reflected = found.reflected + [class.name] %}
+{% if class.attribute | select("in", reflect_script) | list | length > 0 %}
+{% set found.classes = found.classes + [class] %}
+{% set found.class_names = found.class_names + [class.name] %}
+{% endif %}
+{% endfor %}
+{% set scope = {"classes": found.class_names, "enums": found.enum_names, "reflected": found.reflected} %}
+
+local record wbe
+    -- C++ writes a glm::vec2 as x and y, and also reads u and v, which scripts do not use.
+    record Vec2
+        x: number
+        y: number
+    end
+
+    record Vec3
+        x: number
+        y: number
+        z: number
+    end
+
+    record Vec4
+        x: number
+        y: number
+        z: number
+        w: number
+    end
+
+    record Quat
+        x: number
+        y: number
+        z: number
+        w: number
+    end
+{% for enum in found.enums %}
+
+    enum {{ enum.name | teal_name }}
+{% for value in enum["values"] if "WBE_REFLECT_ENUM_IGNORE" not in value.attribute %}
+{% for name in [value.name] + value.aliases %}
+        "{{ name }}"
+{% endfor %}
+{% endfor %}
+    end
+{% endfor %}
+{#- Every script class is an interface, so a script can declare a record that is one, such as a recipe context that adds
+    entries; a class deriving from reflected script classes is an interface that is them. #}
+{% for class in found.classes %}
+{% set parents = namespace(names=[]) %}
+{% for parent in class.extended_parents %}
+{% set parent_name = parent | teal_parent(scope) %}
+{% if parent_name %}
+{% set parents.names = parents.names + [parent_name] %}
+{% endif %}
+{% endfor %}
+
+    interface {{ class.name | teal_name }}{% if parents.names %} is {{ parents.names | join(", ") }}{% endif %}
+
+{% for field in class.fields %}
+{% set field_type = field.type | teal_type(scope) %}
+        {{ field.name | teal_field_name }}: {{ field_type }}
+{% for alias in field.aliases %}
+        {{ alias | teal_field_name }}: {{ field_type }}
+{% endfor %}
+{% endfor %}
+    end
+{% endfor %}
+end
+
+return wbe

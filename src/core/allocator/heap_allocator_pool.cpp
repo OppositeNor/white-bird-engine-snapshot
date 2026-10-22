@@ -61,7 +61,7 @@ MemID HeapAllocatorPool::allocate(size_t p_size) {
     while (*valid_idle_node != nullptr) {
         if ((*valid_idle_node)->size >= p_size) {
             void* result = acquire_memory(*valid_idle_node, p_size);
-            *reinterpret_cast<uint64_t*>(result) = p_size;
+            *reinterpret_cast<Header*>(result) = p_size;
             max_data_loc_tracker = std::max(
                 max_data_loc_tracker, reinterpret_cast<uintptr_t>(result) + p_size - reinterpret_cast<uintptr_t>(mem_chunk));
             return reinterpret_cast<MemID>(result) + HEADER_SIZE;

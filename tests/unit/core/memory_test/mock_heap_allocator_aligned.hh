@@ -27,7 +27,7 @@ public:
     MockHeapAllocatorAligned(size_t p_max_size = 4096) : max_size(p_max_size) {
     }
 
-    MemID allocate(size_t p_size, size_t p_alignment = WBE_DEFAULT_ALIGNMENT) override {
+    virtual MemID allocate(size_t p_size, size_t p_alignment = WBE_DEFAULT_ALIGNMENT) override {
         call_log << "allocate(" << p_size << ", " << p_alignment << "); ";
         if (p_size == 0 || used_size + p_size > max_size) {
             return MEM_NULL;
@@ -42,7 +42,7 @@ public:
         return id;
     }
 
-    void deallocate(MemID p_mem_id) override {
+    virtual void deallocate(MemID p_mem_id) override {
         call_log << "deallocate(" << p_mem_id << "); ";
         auto it = allocations.find(p_mem_id);
         if (it != allocations.end()) {
@@ -52,7 +52,7 @@ public:
         }
     }
 
-    void* get(MemID p_mem_id) const override {
+    virtual void* get(MemID p_mem_id) const override {
         call_log << "get(" << p_mem_id << "); ";
         if (allocations.contains(p_mem_id)) {
             return reinterpret_cast<void*>(p_mem_id);
@@ -65,7 +65,7 @@ public:
         return max_size - used_size;
     }
 
-    void clear() override {
+    virtual void clear() override {
         call_log << "clear(); ";
         for (auto& kv : allocations) {
             free(reinterpret_cast<void*>(kv.first));
@@ -74,12 +74,12 @@ public:
         used_size = 0;
     }
 
-    bool is_empty() const override {
+    virtual bool is_empty() const override {
         call_log << "is_empty(); ";
         return allocations.empty();
     }
 
-    size_t get_allocated_data_size(MemID p_mem_id) const override {
+    virtual size_t get_allocated_data_size(MemID p_mem_id) const override {
         call_log << "get_allocated_data_size(" << p_mem_id << "); ";
         auto it = allocations.find(p_mem_id);
         if (it != allocations.end()) {

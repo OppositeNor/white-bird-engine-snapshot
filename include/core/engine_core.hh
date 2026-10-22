@@ -21,10 +21,8 @@
 #include "core/engine_config/engine_config.hh"
 #include "core/logging/log_stream.hh"
 #include "core/logging/logging_manager.hh"
-#include "generated/label_manager.gen.hh"
-#include "generated/type_uuid.gen.hh"
-#include "platform/file_system/directory.hh"
 #include "platform/file_system/file_system.hh"
+#include "platform/file_system/path.hh"
 #include "utils/interface/i_singleton.hh"
 #include <cstdint>
 #include <ostream>
@@ -63,7 +61,7 @@ public:
      * @param p_argv argv.
      * @param p_root_dir The root directory.
      */
-    EngineCore(uint32_t p_argc, char* p_argv[], const Directory& p_root_dir);
+    EngineCore(uint32_t p_argc, char* p_argv[], const Path& p_root_dir);
 
     /**
      * @brief Get the singleton.
@@ -89,11 +87,6 @@ public:
      */
     EngineConfig* engine_config = nullptr;
     /**
-     * @brief Single tick stack allocator. Contents will be cleared every time a
-     * tick ends.
-     */
-    StackAllocator* single_tick_allocator = nullptr;
-    /**
      * @brief Global pool allocator.
      */
     HeapAllocatorGlobal* pool_allocator = nullptr;
@@ -108,11 +101,15 @@ public:
     /**
      * @brief Manager for the labels.
      */
-    LabelManager* label_manager = nullptr;
+    class LabelManager* label_manager = nullptr;
     /**
      * @brief Manager for type UUIDs.
      */
-    TypeUUIDManager* type_uuid_manager = nullptr;
+    class TypeUUIDManager* type_uuid_manager = nullptr;
+    /**
+     * @brief Factory for constructing serializable objects by reflected name.
+     */
+    class SerializableFactory* serializable_factory = nullptr;
 
 private:
     void initialize(uint32_t p_argc, char* p_argv[]);

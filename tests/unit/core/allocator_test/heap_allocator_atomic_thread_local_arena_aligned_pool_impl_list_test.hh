@@ -19,7 +19,7 @@
 #include "core/allocator/heap_allocator_atomic_thread_local_arena_aligned_pool_impl_list.hh"
 #include "core/allocator/i_allocator.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include "utils/defs.hh"
 #include <atomic>
 #include <barrier>
@@ -37,11 +37,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEHeapAllocAtomicThreadLocalArenaAlignedPoolImplicitListTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -117,7 +117,7 @@ TEST_F(WBEHeapAllocAtomicThreadLocalArenaAlignedPoolImplicitListTest, Concurrent
 
     threads.reserve(THREAD_COUNT);
     for (int i = 0; i < THREAD_COUNT; ++i) {
-        threads.emplace_back([&, i]() {
+        threads.emplace_back([&, i] {
             sync_point.arrive_and_wait();
             for (int j = 0; j < ALLOCS_PER_THREAD; ++j) {
                 WBE::MemID mem = allocator.allocate(32);
@@ -144,7 +144,7 @@ TEST_F(WBEHeapAllocAtomicThreadLocalArenaAlignedPoolImplicitListTest, Concurrent
     threads.clear();
     std::barrier deallocate_sync_point(THREAD_COUNT);
     for (int i = 0; i < THREAD_COUNT; ++i) {
-        threads.emplace_back([&, i]() {
+        threads.emplace_back([&, i] {
             deallocate_sync_point.arrive_and_wait();
             for (WBE::MemID mem : thread_mems[i]) {
                 allocator.deallocate(mem);

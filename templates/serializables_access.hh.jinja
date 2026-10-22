@@ -16,6 +16,12 @@
 #ifndef WBE_FILE_SERIALIZABLES_ACCESS_GEN_HH
 #define WBE_FILE_SERIALIZABLES_ACCESS_GEN_HH
 
+#include <concepts>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
+
 {% for serializable in metadata.classes %}
 {% if serializable.attribute | select("in", static_serializables) | list | length > 0  %}
 #include "{{ serializable.in_header }}"
@@ -70,10 +76,14 @@ public:
     T& get_field(SerializableType& p_serializable, std::string_view p_name) const {
         {% for field in serializable.fields %}
         if (p_name == "{{ field.name }}") {
-            return p_serializable.{{ field.name }};
+            if constexpr (std::same_as<T, decltype(SerializableType::{{ field.name }})>) {
+                return p_serializable.{{ field.name }};
+            } else {
+                throw std::runtime_error("Field type mismatch: " + std::string(p_name));
+            }
         }
         {% endfor %}
-        throw std::runtime_error("Field not found: " + p_name);
+        throw std::runtime_error("Field not found: " + std::string(p_name));
     }
 
     /**
@@ -87,10 +97,34 @@ public:
     const T& get_field(const SerializableType& p_serializable, std::string_view p_name) const {
         {% for field in serializable.fields %}
         if (p_name == "{{ field.name }}") {
-            return p_serializable.{{ field.name }};
+            if constexpr (std::same_as<T, decltype(SerializableType::{{ field.name }})>) {
+                return p_serializable.{{ field.name }};
+            } else {
+                throw std::runtime_error("Field type mismatch: " + std::string(p_name));
+            }
         }
         {% endfor %}
-        throw std::runtime_error("Field not found: " + p_name);
+        throw std::runtime_error("Field not found: " + std::string(p_name));
+    }
+
+    /**
+     * @brief Get the pointer-to-member for a field by name.
+     *
+     * @param p_name The name of the field.
+     * @return The pointer-to-member for the field.
+     */
+    template <typename T>
+    T SerializableType::* get_pointer_to_member(std::string_view p_name) const {
+        {% for field in serializable.fields %}
+        if (p_name == "{{ field.name }}") {
+            if constexpr (std::same_as<T, decltype(SerializableType::{{ field.name }})>) {
+                return &SerializableType::{{ field.name }};
+            } else {
+                throw std::runtime_error("Field type mismatch: " + std::string(p_name));
+            }
+        }
+        {% endfor %}
+        throw std::runtime_error("Field not found: " + std::string(p_name));
     }
 };
 {% endif %}

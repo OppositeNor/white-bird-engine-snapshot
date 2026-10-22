@@ -23,10 +23,41 @@ import build_config
 from build_script.reflection.code_gen import WBEGenFileInfo
 import build_setup
 
+def _get_clang_resource_dir() -> str:
+    """Return the resource directory of the system clang.
+
+    The libclang Python package ships without clang's builtin headers (such as stddef.h). Without them the standard
+    library fails to parse and every type that depends on it is reported as int.
+    """
+    result = subprocess.run(["clang", "-print-resource-dir"], capture_output=True, text=True, check=False)
+    resource_dir = result.stdout.strip()
+    if result.returncode != 0 or not os.path.isfile(os.path.join(resource_dir, "include", "stddef.h")):
+        raise RuntimeError("Failed to locate clang's builtin headers for the metaparser: `clang -print-resource-dir` must name a "
+                           "directory containing include/stddef.h.")
+    return resource_dir
+
+def _get_dependency_include_dirs(p_relative_dirs: list[str]) -> list[str]:
+    """Resolve dependency include directories declared in build_config relative to the dependencies directory."""
+    return [os.path.join(build_setup.dependencies_dir, relative_dir) for relative_dir in p_relative_dirs]
+
+# Every dependency include directory, declared once in build_config and shared with CMake.
+metaparser_dependency_include_dirs: list[str] = _get_dependency_include_dirs(
+    build_config.dependency_include_dirs + build_config.test_dependency_include_dirs)
+
+# Test include directories, mirroring tests/CMakeLists.txt and tests/executable/utilities/CMakeLists.txt.
+metaparser_test_include_dirs: list[str] = [
+    os.path.join(build_setup.root_dir, "tests", "unit"),
+    os.path.join(build_setup.root_dir, "tests", "executable", "utilities"),
+]
+
+# Matches CMAKE_CXX_STANDARD.
 metaparser_clang_args: list[str] = [
-    "-std=c++20",
+    "-std=c++23",
+    "-resource-dir", _get_clang_resource_dir(),
     f"-I{build_setup.include_dir}",
     f"-I{build_setup.per_target_include_dir}",
+    *[f"-I{include_dir}" for include_dir in metaparser_test_include_dirs],
+    *[f"-isystem{include_dir}" for include_dir in metaparser_dependency_include_dirs],
     "-DWBE_REFLECTION_PARSER"
 ]
 
@@ -53,9 +84,30 @@ def _get_cmake_command_from_info(build_info: dict[str, Any]) -> list[str]:
         result.append("-DWBE_MAKE_TEST=ON")
     else:
         result.append("-DWBE_MAKE_TEST=OFF")
+    result.append(f"-DWBE_ENABLE_TSAN={"ON" if build_info.get("enable-tsan", False) else "OFF"}")
+    # CMake lists are semicolon-separated; the arguments are passed without a shell, so no quoting is needed.
+    result.append(f"-DWBE_DEPENDENCY_INCLUDE_DIRS={';'.join(_get_dependency_include_dirs(build_config.dependency_include_dirs))}")
+    result.append(
+        f"-DWBE_TEST_DEPENDENCY_INCLUDE_DIRS={';'.join(_get_dependency_include_dirs(build_config.test_dependency_include_dirs))}")
     if build_info.get("additional-cmake-args") is not None:
         result.append(build_info["additional-cmake-args"])
     return result
+
+def _configure_cmake(build_info: dict[str, Any]) -> None:
+    result = subprocess.run(_get_cmake_command_from_info(build_info), check=False)
+    if result.returncode != 0:
+        raise RuntimeError("Failed to setup cmake build.")
+
+def _build_cmake_target(target: str | None = None) -> None:
+    build_command = ["cmake", "--build", build_setup.build_dir]
+    if target is not None:
+        build_command.extend(["--target", target])
+    if os.cpu_count() is not None:
+        build_command.extend(["-j", str(os.cpu_count())])
+    result = subprocess.run(build_command, check=False)
+    if result.returncode != 0:
+        target_description = target if target is not None else "project"
+        raise RuntimeError(f"Failed to build CMake target {target_description}.")
 
 def _gather_license() -> None:
     # Get white bird engine license
@@ -86,7 +138,6 @@ def _gather_license() -> None:
                 for nf in notice_files:
                     target_name = f"{subdir.name}_{nf.name}"
                     target_path = os.path.join(output_dir, target_name)
-                    print(f"Copying NOTICE {nf} -> {target_path}")
                     shutil.copy2(nf, target_path)
 
 def _gather_gen_infos() -> list[WBEGenFileInfo]:
@@ -106,14 +157,8 @@ if __name__ == "__main__":
     # Gather sources for reflection
     try:
         print(f"WBEBuilder: Building target: {build_setup.args.target}.")
-        print("WBEBuilder: Running asset conditioning pipeline...")
-        build_setup.acp.process_resources()
-        if build_setup.build_target["generate-tests"]:
-            print("WBEBuilder: Running asset conditioning pipeline for test environment...")
-            # Setup test env if generate tests.
-            build_setup.test_env_acp.process_resources()
-        print("WBEBuilder: Gathering licenses...")
-        _gather_license()
+        print("WBEBuilder: Building dependencies...")
+        build_setup.build_dependencies.compile()
         print("WBEBuilder: Gathering sources...")
         if build_setup.build_target["generate-tests"]:
             headers = build_config.project_headers
@@ -122,21 +167,23 @@ if __name__ == "__main__":
         print("WBEBuilder: Gathering generate.json...")
         gen_infos = _gather_gen_infos()
 
-        # Run reflection script
+        # Run reflection script. It runs before the ACP, which type-checks Teal scripts against the generated declarations.
         print("WBEBuilder: Running reflections...")
         on_build.reflect(metaparser_clang_args, build_setup.metadata_path, build_setup.metadata_cache_dir, headers, gen_infos)
 
+        build_setup.setup_acp_compilers()
+        print("WBEBuilder: Running asset conditioning pipeline...")
+        build_setup.acp.process_resources()
+        if build_setup.build_target["generate-tests"]:
+            print("WBEBuilder: Running asset conditioning pipeline with test resources...")
+            build_setup.test_env_acp.process_resources()
+        print("WBEBuilder: Gathering licenses...")
+        _gather_license()
+
         # Build project with CMake
         print("WBEBuilder: Running cmake...")
-        result = subprocess.run(_get_cmake_command_from_info(build_setup.build_target))
-        if result.returncode != 0:
-            raise RuntimeError("Failed to setup cmake build.")
-        build_command = ["cmake", "--build", build_setup.build_dir]
-        if os.cpu_count() is not None:
-            build_command.extend(["-j", str(os.cpu_count())])
-        result = subprocess.run(build_command)
-        if result.returncode != 0:
-            raise RuntimeError("Failed to build with CMake.")
+        _configure_cmake(build_setup.build_target)
+        _build_cmake_target()
 
         # Keep compile database available in both conventional locations used by tooling.
         compile_commands_path = os.path.join(build_setup.build_dir, "compile_commands.json")

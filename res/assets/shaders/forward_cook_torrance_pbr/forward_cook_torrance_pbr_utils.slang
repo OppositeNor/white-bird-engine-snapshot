@@ -15,10 +15,8 @@
 #ifndef WBE_FILE_FORWARD_COOK_TORRANCE_PBR_UTILS_SLANG
 #define WBE_FILE_FORWARD_COOK_TORRANCE_PBR_UTILS_SLANG
 
+#include "light/spot_light_utils.slang"
 #include "utils.slang"
-
-static const uint WBE_MAX_SPOT_LIGHT_COUNT = 4;
-static const uint WBE_MAX_MATERIAL_COUNT = 32;
 
 /**
  * @brief Vertex shader output / fragment shader input for the forward Cook-Torrance PBR pass.
@@ -29,19 +27,19 @@ struct VSOutput {
      */
     float4 position         : SV_Position;
     /**
- * @brief World-space position in xyz. The w component stores the draw instance id used as the material table location.
+ * @brief World-space position in xyz. The w component stores the submesh material id used as the material table location.
      */
     float4 world_position   : TEXCOORD0;
     /**
- * @brief Object-space normal interpolated from the vertex attribute.
+ * @brief World-space normal transformed from the vertex attribute.
      */
     float3 normal           : TEXCOORD1;
     /**
- * @brief Object-space tangent interpolated from the vertex attribute.
+ * @brief World-space tangent transformed from the vertex attribute.
      */
     float3 tangent          : TEXCOORD2;
     /**
- * @brief Object-space bitangent interpolated from the vertex attribute.
+ * @brief World-space bitangent transformed from the vertex attribute.
      */
     float3 bitangent        : TEXCOORD3;
     /**
@@ -54,64 +52,13 @@ struct VSOutput {
     float4 light_space_pos  : TEXCOORD5;
 };
 
-/**
- * @brief Spot light parameters consumed by the forward Cook-Torrance PBR pass. Cone angles are stored as cosines for cheap evaluation.
- */
-struct SpotLightInfo {
-    /// World-to-light view matrix used to sample the shadow map.
-    float4x4 view;
-    /// Light-space projection matrix used to sample the shadow map.
-    float4x4 proj;
-    /// World-space position of the spot light.
-    float3 position;
-    /// Scalar intensity multiplier.
-    float intensity;
-    /// World-space direction the spot is pointing (unit vector).
-    float3 direction;
-    /// Cosine of the inner cone half-angle (full intensity inside).
-    float inner_cone_cos;
-    /// Linear-space color of the spot light.
-    float3 color;
-    /// Cosine of the outer cone half-angle (zero intensity outside).
-    float outer_cone_cos;
-    /// Maximum effective light distance.
-    float range;
-};
-
-/**
- * @brief Spot light uniform payload consumed by the forward Cook-Torrance PBR pass.
- */
-struct SpotLightInfoBuffer {
-    /// Active spot lights. Entries beyond spot_light_count are ignored.
-    SpotLightInfo spot_light_info[WBE_MAX_SPOT_LIGHT_COUNT];
-    /// Number of active spot light entries in spot_light_info.
-    uint spot_light_count;
-};
-
-struct MaterialTextures {
-    SamplerState material_sampler;
-    Texture2D<float4> textures[];
-};
-
-struct MaterialParams {
-    int albedo_index;
-    int normal_index;
-    int roughness_metallic_ao_index;
-};
-
-struct MaterialParamsBuffer {
-    MaterialParams materials[WBE_MAX_MATERIAL_COUNT];
-};
-
-struct LightParam {
-    ConstantBuffer<SpotLightInfo> info;
-    Texture2D<float> shadowmap;
-    SamplerState shadowmap_sampler;
-};
-
-struct LightParams {
-    LightParam lights[WBE_MAX_SPOT_LIGHT_COUNT];
-    ConstantBuffer<uint> light_count;
+struct ForwardLightParamDescriptorIndices {
+    [WBE_DESCRIPTOR("uniform_buffer", "spot_light_info")]
+    uint2 info;
+    [WBE_DESCRIPTOR("sampled_image", "shadowmap")]
+    uint2 shadowmap;
+    [WBE_DESCRIPTOR("sampler", "shadow_sampler")]
+    uint2 shadowmap_sampler;
 };
 
 /**
@@ -127,7 +74,7 @@ float distribution_ggx(float3 p_normal, float3 p_half_vector, float p_roughness)
     float ndoth = max(dot(p_normal, p_half_vector), 0.0);
     float ndoth2 = ndoth * ndoth;
     float denominator = ndoth2 * (alpha2 - 1.0) + 1.0;
-    return alpha2 / max(WBE_PI * denominator * denominator, 0.0001);
+    return alpha2 / max(WBE_PI * denominator * denominator, 0.000000000001);
 }
 
 /**
@@ -167,13 +114,13 @@ float3 fresnel_schlick(float p_cos_theta, float3 p_f0) {
 
 /**
  * @brief Compute a world-space surface normal from a tangent-space normal map sample, falling back to a derived tangent frame when the supplied tangent or bitangent is degenerate.
- * @param p_sampled_normal The normal-map sample with components in [0, 1].
+ * @param p_sampled_normal The encoded normal-map X and Y components in [0, 1].
  * @param p_normal The interpolated surface normal.
  * @param p_tangent The interpolated surface tangent (may be degenerate).
  * @param p_bitangent The interpolated surface bitangent (may be degenerate).
  * @return The unit-length world-space normal.
  */
-float3 normal_from_texture(float3 p_sampled_normal, float3 p_normal, float3 p_tangent, float3 p_bitangent) {
+float3 normal_from_texture(float2 p_sampled_normal, float3 p_normal, float3 p_tangent, float3 p_bitangent) {
     float3 normal = normalize(p_normal);
     float3 tangent = p_tangent;
     float3 bitangent = p_bitangent;
@@ -186,7 +133,7 @@ float3 normal_from_texture(float3 p_sampled_normal, float3 p_normal, float3 p_ta
         bitangent = normalize(bitangent);
     }
 
-    float3 texture_normal = p_sampled_normal * 2.0 - 1.0;
+    float3 texture_normal = decode_normal_map(p_sampled_normal);
     return normalize(tangent * texture_normal.x + bitangent * texture_normal.y + normal * texture_normal.z);
 }
 

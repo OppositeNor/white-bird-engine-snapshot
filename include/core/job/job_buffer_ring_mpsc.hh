@@ -22,6 +22,8 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <future>
+#include <mutex>
 #include <semaphore>
 namespace WhiteBirdEngine {
 
@@ -50,7 +52,14 @@ public:
     JobBufferRingMPSC(HeapAllocatorDefault* p_allocator, size_t p_buffer_size);
 
     std::function<void()> retrieve_job(bool p_block = false);
-    void add_job(std::function<void()> p_job);
+
+    /**
+     * @brief Add a job, waiting until the consumer frees capacity when the buffer is full.
+     *
+     * @param p_job The job to add.
+     * @return A future that becomes ready after the job finishes.
+     */
+    std::future<void> add_job(std::function<void()> p_job);
 
     /**
      * @brief Get the semaphore.
@@ -62,8 +71,11 @@ public:
     }
 
 private:
+    HeapAllocatorDefault* allocator;
     std::counting_semaphore<> semaphore{0};
+    std::counting_semaphore<> available_slot_semaphore{0};
     Vector<std::function<void()>, HeapAllocatorDefault> buffer;
+    std::mutex producer_mutex;
     WBE_NO_FALSE_SHARING std::atomic<size_t> head;
     WBE_NO_FALSE_SHARING std::atomic<size_t> tail;
 };

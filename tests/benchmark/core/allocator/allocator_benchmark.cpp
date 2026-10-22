@@ -18,6 +18,7 @@
 #include "core/allocator/heap_allocator_atomic_mutex_aligned_pool_impl_list.hh"
 #include "core/allocator/heap_allocator_atomic_shared_mutex_aligned_pool.hh"
 #include "core/allocator/heap_allocator_atomic_shared_mutex_aligned_pool_impl_list.hh"
+#include "core/allocator/heap_allocator_atomic_size_classified.hh"
 // #include "core/allocator/heap_allocator_atomic_thread_local_arena_aligned_pool_impl_list.hh"
 #include "core/allocator/i_allocator.hh"
 #include "utils/defs.hh"
@@ -33,6 +34,21 @@ namespace WBE = WhiteBirdEngine;
 constexpr size_t ALLOC_NUM = 1000;
 constexpr size_t POOL_SIZE = WBE_MI_B(128);
 constexpr size_t FREE_BATCH = 10000;
+
+// Construct a pool whose allocations of ALLOC_NUM ints get p_pool_size bytes.
+template <typename Allocator>
+static Allocator make_pool(size_t p_pool_size) {
+    return Allocator(p_pool_size);
+}
+
+// The benchmark allocations fall in the medium class, which gets the whole pool size; the other classes stay minimal.
+template <>
+WBE::HeapAllocatorAtomicSizeClassified make_pool<WBE::HeapAllocatorAtomicSizeClassified>(size_t p_pool_size) {
+    static_assert(ALLOC_NUM * sizeof(int) > WBE::HeapAllocatorAtomicSizeClassified::DEFAULT_SMALL_MAX_ALLOCATION_SIZE);
+    static_assert(ALLOC_NUM * sizeof(int) <= WBE::HeapAllocatorAtomicSizeClassified::DEFAULT_MEDIUM_MAX_ALLOCATION_SIZE);
+    return WBE::HeapAllocatorAtomicSizeClassified(
+        WBE::HeapAllocatorAtomicSizeClassified::make_default_size_classes(WBE_MI_B(1), p_pool_size, WBE_MI_B(1)));
+}
 
 template <typename Allocator>
 static void write_allocation(Allocator& p_pool, WBE::MemID p_mem) {
@@ -66,7 +82,7 @@ static void deallocate_allocated(Allocator& p_pool, std::vector<WBE::MemID>& p_a
 
 template <typename Allocator, bool ShuffleEnabled>
 static void run_heap_allocated_pool_benchmark(benchmark::State& p_state, size_t p_pool_size) {
-    Allocator pool(p_pool_size);
+    Allocator pool = make_pool<Allocator>(p_pool_size);
     std::vector<WBE::MemID> allocated;
     allocated.reserve(FREE_BATCH);
     size_t counter = 0;
@@ -116,7 +132,7 @@ static void run_heap_allocated_arena_pool_benchmark(benchmark::State& p_state, s
 
 template <typename Allocator>
 static void run_async_heap_allocated_pool_benchmark(benchmark::State& p_state) {
-    static Allocator pool(POOL_SIZE * 8);
+    static Allocator pool = make_pool<Allocator>(POOL_SIZE * 8);
     std::vector<WBE::MemID> allocated;
     allocated.reserve(FREE_BATCH);
     size_t counter = 0;
@@ -277,6 +293,11 @@ static void heap_allocated_atomic_arena_aligned_pool_impl_list_4_arenas_benchmar
 }
 BENCHMARK(heap_allocated_atomic_arena_aligned_pool_impl_list_4_arenas_benchmark_with_shuffle);
 
+static void heap_allocated_atomic_size_classified_benchmark_with_shuffle(benchmark::State& p_state) {
+    run_heap_allocated_pool_benchmark<WBE::HeapAllocatorAtomicSizeClassified, true>(p_state, POOL_SIZE);
+}
+BENCHMARK(heap_allocated_atomic_size_classified_benchmark_with_shuffle);
+
 // static void heap_allocated_atomic_thread_local_arena_aligned_pool_impl_list_benchmark_with_shuffle(benchmark::State& p_state) {
 //    run_heap_allocated_pool_benchmark<WBE::HeapAllocatorAtomicThreadLocalArenaAlignedPoolImplicitList, true>(p_state, POOL_SIZE);
 // }
@@ -311,6 +332,11 @@ static void heap_allocated_atomic_arena_aligned_pool_impl_list_4_arenas_benchmar
     run_heap_allocated_arena_pool_benchmark<false>(p_state, POOL_SIZE, 4);
 }
 BENCHMARK(heap_allocated_atomic_arena_aligned_pool_impl_list_4_arenas_benchmark_without_shuffle);
+
+static void heap_allocated_atomic_size_classified_benchmark_without_shuffle(benchmark::State& p_state) {
+    run_heap_allocated_pool_benchmark<WBE::HeapAllocatorAtomicSizeClassified, false>(p_state, POOL_SIZE);
+}
+BENCHMARK(heap_allocated_atomic_size_classified_benchmark_without_shuffle);
 
 // static void heap_allocated_atomic_thread_local_arena_aligned_pool_impl_list_benchmark_without_shuffle(benchmark::State& p_state) {
 //     run_heap_allocated_pool_benchmark<WBE::HeapAllocatorAtomicThreadLocalArenaAlignedPoolImplicitList, false>(p_state, POOL_SIZE);
@@ -383,6 +409,11 @@ static void async_heap_allocated_atomic_arena_aligned_pool_impl_list_4_arenas_be
     run_async_heap_allocated_arena_pool_benchmark<4>(p_state);
 }
 BENCHMARK(async_heap_allocated_atomic_arena_aligned_pool_impl_list_4_arenas_benchmark)->Threads(2)->Threads(4)->Threads(8);
+
+static void async_heap_allocated_atomic_size_classified_benchmark(benchmark::State& p_state) {
+    run_async_heap_allocated_pool_benchmark<WBE::HeapAllocatorAtomicSizeClassified>(p_state);
+}
+BENCHMARK(async_heap_allocated_atomic_size_classified_benchmark)->Threads(2)->Threads(4)->Threads(8);
 
 // static void async_heap_allocated_atomic_thread_local_arena_aligned_pool_impl_list_benchmark(benchmark::State& p_state) {
 //     run_async_heap_allocated_pool_benchmark<WBE::HeapAllocatorAtomicThreadLocalArenaAlignedPoolImplicitList>(p_state);

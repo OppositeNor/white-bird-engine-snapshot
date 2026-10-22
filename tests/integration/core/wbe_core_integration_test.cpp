@@ -14,7 +14,7 @@
 */
 
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "platform/file_system/path.hh"
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -39,12 +39,12 @@ int TrackedObject::instance_count = 0;
 
 class WBECoreIntegrationTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Path("test_env"));
         TrackedObject::instance_count = 0;
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
         // Verify no memory leaks
         ASSERT_EQ(TrackedObject::instance_count, 0);

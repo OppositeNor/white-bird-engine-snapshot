@@ -12,15 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-from typing import Callable
+from typing import TYPE_CHECKING
 from build_script.utils import hash_file, hash_str_sha256
-from build_script.reflection.reflect import WBEReflector
+from build_script.reflection.attribute_parser import parse_metadata_attributes
 import clang.cindex
 import json
-from build_script.reflection.metadata_types import WBEClassMetadata, WBEFieldMetadata, WBEFileMetadata, WBELabelMetadata, WBEMetadata
+from build_script.reflection.metadata_types import WBEClassMetadata, WBEEnumMetadata, WBEEnumValueMetadata, WBEFieldMetadata, WBEFileMetadata, WBELabelMetadata, WBEMetadata, WBEMethodMetadata
+
+if TYPE_CHECKING:
+    from build_script.reflection.reflect import WBEReflector
 
 WBE_REFLECT = "WBE_REFLECT"
-WBE_COMPONENT = "WBE_COMPONENT"
+
+# Bump whenever the extracted metadata changes, so cached metadata of unchanged headers is reparsed. Changes to the clang
+# arguments invalidate the cache on their own.
+METAPARSER_VERSION = 5
 
 class WBEMetaparser:
     """Metaparser
@@ -30,7 +36,7 @@ class WBEMetaparser:
         clang_args: The arguments for clang.
         cache_dir: The cache directory.
     """
-    def __init__(self, reflector: WBEReflector, clang_args: list[str], cache_dir: str,
+    def __init__(self, reflector: "WBEReflector", clang_args: list[str], cache_dir: str,
                  sources: list[str]) -> None:
         """Constructor.
 
@@ -45,7 +51,7 @@ class WBEMetaparser:
         self.cache_dir = cache_dir
         self.sources = sources
         self._metadata: dict[str, WBEFileMetadata] = {}
-        self._class_table: dict[str, WBEClassMetadata] = {}
+        self._parser_signature = hash_str_sha256("\0".join([str(METAPARSER_VERSION), *clang_args]))
 
     def parse(self, cpp_file_path : str) -> None:
         """Parse the C++ file.
@@ -63,12 +69,13 @@ class WBEMetaparser:
         for metadata in sorted_metadata:
             result_metadata.labels.extend(metadata.labels)
             result_metadata.classes.extend(metadata.classes)
+            result_metadata.enums.extend(metadata.enums)
         self.reflector.register_metadata(result_metadata)
 
     def _get_metadata(self, cpp_file_path: str, cache_path: str) -> WBEFileMetadata:
         preloaded = self._metadata.get(cpp_file_path)
         if preloaded is not None:
-            result = preloaded
+            return preloaded
         if os.path.exists(cache_path):
             result = self._register_from_cache(cpp_file_path, cache_path)
         else:
@@ -81,7 +88,7 @@ class WBEMetaparser:
                 data = json.load(f)
             metadata = WBEFileMetadata(**data)
             file_content_hashcode = hash_file(cpp_file_path)
-            if metadata.hashcode != file_content_hashcode:
+            if metadata.hashcode != file_content_hashcode or metadata.parser_signature != self._parser_signature:
                 return self._register_from_clang(cpp_file_path, cache_path)
             self._metadata[cpp_file_path] = metadata
             return metadata
@@ -114,7 +121,11 @@ class WBEMetaparser:
         metadata.deps = self._get_include_deps(tu)
         metadata.file_path = cpp_file_path
         self._register_metadata(tu, metadata, cpp_file_path)
+        # A translation unit of an engine header holds the whole include closure; release it before the next parse.
+        del tu
+        del index
         metadata.hashcode = hash_file(cpp_file_path)
+        metadata.parser_signature = self._parser_signature
         self._metadata[cpp_file_path] = metadata
         with open(cache_path, "w") as f:
             json.dump(metadata.model_dump(), f, indent=4)
@@ -130,10 +141,20 @@ class WBEMetaparser:
             self._handle_visit_var_decl(metadata, cursor)
         elif cursor.kind == clang.cindex.CursorKind.CLASS_DECL or cursor.kind == clang.cindex.CursorKind.STRUCT_DECL:
             self._handle_visit_class_decl(metadata, cursor, in_file)
+        elif cursor.kind == clang.cindex.CursorKind.ENUM_DECL:
+            self._handle_visit_enum_decl(metadata, cursor, in_file)
 
         for child in cursor.get_children():
-            if child.kind != clang.cindex.CursorKind.ANNOTATE_ATTR:
+            # Every header registers only what it declares itself; included headers register their own declarations
+            # when they are parsed, so declarations from other files are skipped together with their children.
+            if child.kind != clang.cindex.CursorKind.ANNOTATE_ATTR and WBEMetaparser._is_declared_in(child, in_file):
                 self._visit_attributes(metadata, child, in_file)
+
+    @staticmethod
+    def _is_declared_in(cursor: clang.cindex.Cursor, in_file: str) -> bool:
+        """Whether a cursor is located in the given file."""
+        location_file = cursor.location.file
+        return location_file is not None and os.path.abspath(location_file.name) == os.path.abspath(in_file)
 
     @staticmethod
     def _is_in_namelist(name: str, namelist: list) -> bool:
@@ -142,27 +163,59 @@ class WBEMetaparser:
     def _handle_visit_var_decl(self, metadata: WBEFileMetadata, cursor: clang.cindex.Cursor) -> None:
         for attr in cursor.get_children():
             if attr.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
-                if not self._any_all(metadata, lambda curr_metadata:
-                        WBEMetaparser._is_in_namelist(cursor.spelling, curr_metadata.labels)):
-                    attributes = self._get_attributes(attr.spelling)
-                    label_metadata = WBELabelMetadata(name=cursor.spelling, attribute=attributes)
+                if not WBEMetaparser._is_in_namelist(cursor.spelling, metadata.labels):
+                    attributes, attribute_parameters, aliases = self._get_attributes(attr.spelling)
+                    label_metadata = WBELabelMetadata(name=cursor.spelling, attribute=attributes,
+                                                       attribute_parameters=attribute_parameters, aliases=aliases)
                     metadata.labels.append(label_metadata)
 
     def _handle_visit_class_decl(self, metadata: WBEFileMetadata, cursor: clang.cindex.Cursor, in_file: str) -> None:
         for attr in cursor.get_children():
             if attr.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
-                if not self._any_all(metadata, lambda curr_metadata:
-                        WBEMetaparser._is_in_namelist(cursor.spelling, curr_metadata.classes)):
-                    attributes = self._get_attributes(attr.spelling)
-                    class_metadata = self._get_class_metadata(cursor, attributes, in_file)
+                if not WBEMetaparser._is_in_namelist(cursor.spelling, metadata.classes):
+                    attributes, attribute_parameters, aliases = self._get_attributes(attr.spelling)
+                    class_metadata = self._get_class_metadata(cursor, attributes, attribute_parameters, aliases, in_file)
                     metadata.classes.append(class_metadata)
 
-    def _read_from_cache(self, cpp_file_path: str, cache_path: str) -> WBEFileMetadata:
-        with open(cache_path) as f:
-            data = json.load(f)
-        metadata = WBEFileMetadata(**data)
-        self._metadata[cpp_file_path] = metadata
-        return metadata
+    def _handle_visit_enum_decl(self, metadata: WBEFileMetadata, cursor: clang.cindex.Cursor, in_file: str) -> None:
+        """Register an annotated enum, including the metadata and serialization aliases of its enumerators."""
+        for attr in cursor.get_children():
+            if attr.kind != clang.cindex.CursorKind.ANNOTATE_ATTR:
+                continue
+            qualified_name = cursor.type.get_canonical().spelling
+            if any(existing.qualified_name == qualified_name for existing in metadata.enums):
+                return
+            attributes, attribute_parameters, aliases = self._get_attributes(attr.spelling)
+            enum_metadata = WBEEnumMetadata(name=cursor.spelling,
+                                            qualified_name=qualified_name,
+                                            in_header=in_file,
+                                            attribute=attributes,
+                                            attribute_parameters=attribute_parameters,
+                                            aliases=aliases,
+                                            underlying_type=cursor.enum_type.get_canonical().spelling,
+                                            is_scoped=cursor.is_scoped_enum())
+            for enumerator in cursor.get_children():
+                if enumerator.kind != clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+                    continue
+                value_attributes: list[str] = []
+                value_attribute_parameters: dict[str, list[str]] = {}
+                value_aliases: list[str] = []
+                for enumerator_attr in enumerator.get_children():
+                    if enumerator_attr.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
+                        attributes, attribute_parameters, aliases = self._get_attributes(enumerator_attr.spelling)
+                        duplicate_parameters = value_attribute_parameters.keys() & attribute_parameters.keys()
+                        if duplicate_parameters:
+                            raise ValueError(f"Duplicate enumerator metadata attributes: {sorted(duplicate_parameters)}")
+                        value_attributes.extend(attributes)
+                        value_attribute_parameters.update(attribute_parameters)
+                        value_aliases.extend(aliases)
+                enum_metadata.values.append(WBEEnumValueMetadata(name=enumerator.spelling,
+                                                                 value=enumerator.enum_value,
+                                                                 attribute=value_attributes,
+                                                                 attribute_parameters=value_attribute_parameters,
+                                                                 aliases=value_aliases))
+            metadata.enums.append(enum_metadata)
+            return
 
     def _get_include_deps(self, tu: clang.cindex.TranslationUnit) -> list[str]:
         deps: set[str] = set()
@@ -172,22 +225,15 @@ class WBEMetaparser:
                 deps.add(incl_path_abs)
         return list(deps)
 
-    def _any_all(self, metadata: WBEFileMetadata, predicate: Callable[[WBEFileMetadata], bool]) -> bool:
-        if predicate(metadata):
-            return True
-        for dep in metadata.deps:
-            dep_metadata_file_path = os.path.join(self.cache_dir, f"{hash_str_sha256(dep)}.json")
-            dep_metadata = self._get_metadata(dep, dep_metadata_file_path)
-            if predicate(dep_metadata):
-                return True
-        return False
-
     def _get_class_metadata(self, cursor: clang.cindex.Cursor, attributes: list[str],
+                            attribute_parameters: dict[str, list[str]], aliases: list[str],
                             in_file: str) -> WBEClassMetadata:
         result = WBEClassMetadata()
         result.in_header = in_file
         result.name = cursor.spelling
         result.attribute = attributes
+        result.attribute_parameters = attribute_parameters
+        result.aliases = aliases
         result.is_struct = cursor.kind == clang.cindex.CursorKind.STRUCT_DECL
 
         for field in cursor.get_children():
@@ -197,13 +243,46 @@ class WBEMetaparser:
                 for attr in field.get_children():
                     if attr.kind != clang.cindex.CursorKind.ANNOTATE_ATTR:
                         continue
-                    attributes = self._get_attributes(attr.spelling)
+                    attributes, attribute_parameters, aliases = self._get_attributes(attr.spelling)
                     if WBE_REFLECT in attributes:
                         result.fields.append(WBEFieldMetadata(attribute=attributes,
+                                                              aliases=aliases,
+                                                              attribute_parameters=attribute_parameters,
                                                               name=field.spelling, type=field.type.spelling))
+            if field.kind == clang.cindex.CursorKind.CXX_METHOD:
+                method_metadata = self._get_method_metadata(field)
+                if method_metadata is not None:
+                    result.methods.append(method_metadata)
         return result
 
-    def _get_attributes(self, attr_spelling : str) -> list[str]:
-        return attr_spelling.split(", ")
+    def _get_method_metadata(self, cursor: clang.cindex.Cursor) -> WBEMethodMetadata | None:
+        """Get the metadata of a method annotated with WBE_META(WBE_REFLECT, ...), like reflected fields.
+
+        Args:
+            cursor: The CXX_METHOD cursor.
+
+        Returns:
+            The method metadata, or None when the method is not reflected.
+        """
+        for attr in cursor.get_children():
+            if attr.kind != clang.cindex.CursorKind.ANNOTATE_ATTR:
+                continue
+            attributes, attribute_parameters, aliases = self._get_attributes(attr.spelling)
+            if WBE_REFLECT not in attributes:
+                continue
+            arguments = list(cursor.get_arguments())
+            return WBEMethodMetadata(attribute=attributes,
+                                     aliases=aliases,
+                                     attribute_parameters=attribute_parameters,
+                                     method_name=cursor.spelling,
+                                     name=[argument.spelling for argument in arguments],
+                                     type=[argument.type.spelling for argument in arguments],
+                                     ret_type=cursor.result_type.spelling,
+                                     is_static=cursor.is_static_method(),
+                                     is_const=cursor.is_const_method())
+        return None
+
+    def _get_attributes(self, attr_spelling: str) -> tuple[list[str], dict[str, list[str]], list[str]]:
+        return parse_metadata_attributes(attr_spelling)
 
 

@@ -17,7 +17,6 @@
 
 #include "utils.slang"
 
-static const uint WBE_MAX_MATERIAL_COUNT = 32;
 
 /**
  * @brief Vertex shader output / fragment shader input for the deferred G-buffer pass.
@@ -32,15 +31,15 @@ struct VSOutput {
      */
     float4 world_position : TEXCOORD0;
     /**
- * @brief Object-space normal interpolated from the vertex attribute.
+ * @brief World-space normal transformed from the vertex attribute.
      */
     float3 normal         : TEXCOORD1;
     /**
- * @brief Object-space tangent interpolated from the vertex attribute.
+ * @brief World-space tangent transformed from the vertex attribute.
      */
     float3 tangent        : TEXCOORD2;
     /**
- * @brief Object-space bitangent interpolated from the vertex attribute.
+ * @brief World-space bitangent transformed from the vertex attribute.
      */
     float3 bitangent      : TEXCOORD3;
     /**
@@ -50,38 +49,14 @@ struct VSOutput {
 };
 
 /**
- * @brief Bindless material textures sampled by the G-buffer pass.
- */
-struct MaterialTextures {
-    SamplerState material_sampler;
-    Texture2D<float4> textures[];
-};
-
-/**
- * @brief Descriptor indices for the active material textures.
- */
-struct MaterialParams {
-    int albedo_index;
-    int normal_index;
-    int roughness_metallic_ao_index;
-};
-
-/**
- * @brief Descriptor-index table for every material addressed by an indirect draw.
- */
-struct MaterialParamsBuffer {
-    MaterialParams materials[WBE_MAX_MATERIAL_COUNT];
-};
-
-/**
  * @brief Compute a world-space surface normal from a tangent-space normal map sample.
- * @param p_sampled_normal The normal-map sample with components in [0, 1].
+ * @param p_sampled_normal The encoded normal-map X and Y components in [0, 1].
  * @param p_normal The interpolated surface normal.
  * @param p_tangent The interpolated surface tangent.
  * @param p_bitangent The interpolated surface bitangent.
  * @return The unit-length world-space normal.
  */
-float3 normal_from_texture(float3 p_sampled_normal, float3 p_normal, float3 p_tangent, float3 p_bitangent) {
+float3 normal_from_texture(float2 p_sampled_normal, float3 p_normal, float3 p_tangent, float3 p_bitangent) {
     float3 normal = normalize(p_normal);
     float3 tangent = p_tangent;
     float3 bitangent = p_bitangent;
@@ -94,7 +69,7 @@ float3 normal_from_texture(float3 p_sampled_normal, float3 p_normal, float3 p_ta
         float handedness = dot(cross(normal, tangent), bitangent) < 0.0 ? -1.0 : 1.0;
         bitangent = normalize(cross(normal, tangent)) * handedness;
     }
-    float3 tangent_space_normal = normalize(p_sampled_normal * 2.0 - 1.0);
+    float3 tangent_space_normal = decode_normal_map(p_sampled_normal);
     return normalize(tangent * tangent_space_normal.x + bitangent * tangent_space_normal.y + normal * tangent_space_normal.z);
 }
 

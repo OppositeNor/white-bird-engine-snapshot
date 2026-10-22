@@ -10,3 +10,15 @@ vgcore*
 *.gen*
 
 compile_commands.json
+# Teal configuration is generated
+tlconfig.lua
+other/
+
+imgui.ini
+*.log
+
+# TODO: Figure out a way to import this.
+res/assets/other/
+res/assets/models/IntelSponza
+res/assets/models/IntelSponzaCurtains
+res/assets/models/LumberyardBistro

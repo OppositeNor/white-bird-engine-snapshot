@@ -25,7 +25,7 @@
 namespace WhiteBirdEngine {
 
 #define WBE_START_PROFILE(CHANNEL, p_message)                                                                               \
-    auto profiler_##__LINE__ = WhiteBirdEngine::Profiler(CHANNEL, p_message, std::string(__FILE__), __LINE__)
+    auto WBE_CONCAT(profiler_, __LINE__) = WhiteBirdEngine::Profiler(CHANNEL, p_message, std::string(__FILE__), __LINE__)
 
 /**
  * @brief The profiler class.

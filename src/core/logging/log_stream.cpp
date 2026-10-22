@@ -14,7 +14,7 @@
 */
 #include "core/logging/log_stream.hh"
 #include "core/engine_core.hh"
-#include <string>
+#include "generated/label_manager.gen.hh"
 #include <string_view>
 
 namespace WhiteBirdEngine {

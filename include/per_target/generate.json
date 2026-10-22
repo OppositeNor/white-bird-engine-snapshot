@@ -5,8 +5,17 @@
         "template" : "serializables_sd.hh.jinja",
         "data" : {
             "metadata" : ".metadata",
-            "serializables" : ".serializables",
-            "static_serializables" : ".static_serializables"
+            "static_serializables" : ".static_serializables",
+            "strict_deserializations" : ".strict_deserializations"
+        }
+    },
+    {
+        "out_dir" : "${include_dir}/per_target/${build_target}/generated",
+        "output_name" : "enum_reflection.gen.hh",
+        "template" : "enum_reflection.hh.jinja",
+        "data" : {
+            "metadata" : ".metadata",
+            "reflected_enums" : ".reflected_enums"
         }
     },
     {
@@ -15,8 +24,16 @@
         "template" : "serializables_access.hh.jinja",
         "data" : {
             "metadata" : ".metadata",
-            "serializables" : ".serializables",
             "static_serializables" : ".static_serializables"
+        }
+    },
+    {
+        "out_dir" : "${include_dir}/per_target/${build_target}/generated",
+        "output_name" : "serializable_factory.gen.hh",
+        "template" : "serializable_factory.hh.jinja",
+        "data" : {
+            "metadata" : ".metadata",
+            "serializables" : ".serializables"
         }
     },
     {

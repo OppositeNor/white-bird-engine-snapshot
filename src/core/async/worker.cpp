@@ -15,6 +15,7 @@
 #include "core/async/worker.hh"
 #include "platform/file_system/path.hh"
 #include "utils/utils.hh"
+#include <cstddef>
 #include <functional>
 #include <future>
 #include <string>
@@ -22,22 +23,30 @@
 
 namespace WhiteBirdEngine {
 
-void Worker::add_job(std::function<void()> p_job) {
-    job_buffer->add_job(std::move(p_job));
+Worker::Worker() : Worker(1) {
 }
 
-void Worker::run() {
-    while (!should_exit) {
-        auto job = job_buffer->retrieve_job(true);
-        if (job != nullptr) {
-            job();
-        }
-    }
+Worker::Worker(size_t p_thread_count) : thread_pool(p_thread_count) {
+    singleton = this;
 }
 
-void Worker::read_text_file(std::promise<std::string>& p_promise, const Path& p_path) {
-    add_job([&]() {
-        p_promise.set_value(load_text_file(static_cast<std::string>(p_path).c_str()));
+Worker::~Worker() {
+    singleton = nullptr;
+}
+
+std::future<void> Worker::add_job(std::function<void()> p_job) {
+    return thread_pool.submit_task([job = std::move(p_job)]() {
+        job();
+    });
+}
+
+void Worker::wait() {
+    thread_pool.wait();
+}
+
+std::future<std::string> Worker::read_text_file(const Path& p_path) {
+    return thread_pool.submit_task([path = p_path]() {
+        return load_text_file(path.string().c_str());
     });
 }
 

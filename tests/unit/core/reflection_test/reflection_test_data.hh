@@ -72,6 +72,16 @@ struct WBE_META(WBE_SERIALIZABLE) TestPartialStruct final : public Serializable 
     uint64_t ui64_test = 0;
 };
 
+struct WBE_META(WBE_SERIALIZABLE, WBE_SERIALIZATION_ALIASES(TestSerializableAlias, LegacySerializableAlias))
+    TestSerializableAliases final : public Serializable {
+    WBE_DECL_SERIALIZABLE(TestSerializableAliases)
+
+    WBE_META(WBE_REFLECT, WBE_SERIALIZATION_ALIASES(legacy_name, display_name))
+    std::string canonical_name;
+    WBE_META(WBE_REFLECT, WBE_REFLECT_REQUIRED, WBE_SERIALIZATION_ALIASES(required_alias))
+    int32_t required_value = 0;
+};
+
 struct WBE_META(WBE_SERIALIZABLE) TestSerializableNesting final : public Serializable {
     WBE_DECL_SERIALIZABLE(TestSerializableNesting)
 
@@ -397,6 +407,157 @@ struct WBE_META(WBE_SERIALIZABLE) TestNestedRequired final : public Serializable
     int32_t optional_id = 0;
     WBE_META(WBE_REFLECT, WBE_REFLECT_REQUIRED)
     std::vector<TestStaticWithRequired> required_static_vector;
+};
+
+// Strict deserialization: unknown keys throw, including keys of a derived class when a strict base is deserialized alone.
+struct WBE_META(WBE_SERIALIZABLE_STATIC, WBE_STRICT_DESERIALIZATION) TestStrictBase {
+    WBE_META(WBE_REFLECT)
+    int32_t base_value = 0;
+    WBE_META(WBE_REFLECT, WBE_SERIALIZATION_ALIASES(base_alias))
+    std::string base_name;
+};
+
+struct WBE_META(WBE_SERIALIZABLE_STATIC, WBE_STRICT_DESERIALIZATION) TestStrictChild : public TestStrictBase {
+    WBE_META(WBE_REFLECT, WBE_REFLECT_REQUIRED)
+    int32_t child_value = 0;
+};
+
+// A lenient class with a lenient base, holding a strict member: only the member's object is checked.
+struct WBE_META(WBE_SERIALIZABLE_STATIC) TestLenientHolder {
+    WBE_META(WBE_REFLECT)
+    TestStrictBase strict_member;
+    WBE_META(WBE_REFLECT)
+    int32_t holder_value = 0;
+};
+
+// A strict class whose base is lenient: the base's fields are still known keys.
+struct WBE_META(WBE_SERIALIZABLE_STATIC) TestLenientBase {
+    WBE_META(WBE_REFLECT)
+    int32_t lenient_base_value = 0;
+};
+
+struct WBE_META(WBE_SERIALIZABLE_STATIC, WBE_STRICT_DESERIALIZATION) TestStrictOverLenient : public TestLenientBase {
+    WBE_META(WBE_REFLECT)
+    int32_t strict_value = 0;
+};
+
+// Exercises method reflection; the metaparser collects only the methods annotated with WBE_REFLECT.
+class WBE_META(WBE_TEST_METHODS) TestReflectedMethods final {
+public:
+    WBE_META(WBE_REFLECT)
+    int32_t add(int32_t p_left, int32_t p_right) const {
+        return p_left + p_right;
+    }
+
+    WBE_META(WBE_REFLECT, WBE_SERIALIZATION_ALIASES(make, build))
+    static TestReflectedMethods create(const std::string& p_name, glm::vec3 p_offset) {
+        TestReflectedMethods result;
+        result.name = p_name;
+        result.offset = p_offset;
+        return result;
+    }
+
+    WBE_META(WBE_REFLECT)
+    void reset() {
+        name.clear();
+    }
+
+    WBE_META(WBE_REFLECT)
+    void set(int32_t p_value) {
+        value = p_value;
+    }
+
+    WBE_META(WBE_REFLECT)
+    void set(const std::string& p_value) {
+        name = p_value;
+    }
+
+    WBE_META(WBE_REFLECT)
+    void ignore(float /*unnamed*/) {
+    }
+
+    WBE_META(WBE_REFLECT)
+    const std::string& get_name() const {
+        return name;
+    }
+
+    WBE_META(WBE_REFLECT)
+    static const int32_t* find(const std::vector<int32_t>& p_values, int32_t p_target) {
+        for (const int32_t& value : p_values) {
+            if (value == p_target) {
+                return &value;
+            }
+        }
+        return nullptr;
+    }
+
+    int32_t not_annotated() const {
+        return value;
+    }
+
+    WBE_META(WBE_TEST_ONLY)
+    int32_t annotated_without_reflect() const {
+        return value;
+    }
+
+private:
+    std::string name;
+    glm::vec3 offset{0.0F};
+    int32_t value = 0;
+};
+
+/**
+ * @brief Reflected enum with a signed narrow underlying type, aliases, and two enumerators sharing a value.
+ */
+enum class WBE_META(WBE_REFLECT_ENUM) TestEnumSigned : int8_t {
+    NEGATIVE WBE_META(WBE_SERIALIZATION_ALIASES(neg, minus)) = -3,
+    ZERO = 0,
+    POSITIVE WBE_META(WBE_SERIALIZATION_ALIASES(pos)) = 100,
+    // Shares the value of ZERO, which stays the canonical name.
+    SAME_AS_ZERO = 0,
+};
+
+/**
+ * @brief Reflected enum with a 64-bit unsigned underlying type and an ignored sentinel.
+ */
+enum class WBE_META(WBE_REFLECT_ENUM) TestEnumUnsigned64 : uint64_t {
+    SMALL = 1,
+    LARGE = 0xFFFF'FFFF'FFFF'FFF0ULL,
+    IGNORED_SENTINEL WBE_META(WBE_REFLECT_ENUM_IGNORE) = 0xFFFF'FFFF'FFFF'FFF1ULL,
+};
+
+/**
+ * @brief Not reflected; used to check ReflectedEnumConcept.
+ */
+enum class TestEnumUnreflected : uint8_t {
+    VALUE,
+};
+
+/**
+ * @brief Holds an unscoped reflected enum nested in a class.
+ */
+struct TestEnumHolder {
+    /**
+     * @brief Nested unscoped reflected enum.
+     */
+    enum WBE_META(WBE_REFLECT_ENUM) Nested : uint8_t {
+        NESTED_A,
+        NESTED_B WBE_META(WBE_SERIALIZATION_ALIASES(b)),
+    };
+};
+
+/**
+ * @brief Serializable with reflected enum fields.
+ */
+struct WBE_META(WBE_SERIALIZABLE_STATIC) TestEnumFields {
+    WBE_META(WBE_REFLECT)
+    TestEnumSigned signed_value = TestEnumSigned::ZERO;
+    WBE_META(WBE_REFLECT)
+    TestEnumUnsigned64 unsigned_value = TestEnumUnsigned64::SMALL;
+    WBE_META(WBE_REFLECT)
+    std::optional<TestEnumSigned> optional_value;
+    WBE_META(WBE_REFLECT)
+    std::vector<TestEnumHolder::Nested> nested_values;
 };
 
 } // namespace WhiteBirdEngine

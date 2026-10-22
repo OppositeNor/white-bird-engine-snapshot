@@ -15,13 +15,14 @@
 from pathlib import Path
 from typing import override
 from build_script.resource.acp.acp_compiler import ManifestResource, WBEACPCompiler
-from wbe_utils_model_compiler import WBEUtilsModelCompiler
+
+from wbe_utils_model_compiler import TextureCompiler, WBEUtilsModelCompiler
 
 class WBEACPCompilerModel(WBEACPCompiler):
     """The model compiler.
     """
-    def __init__(self) -> None:
-        self._utils_mesh_compiler = WBEUtilsModelCompiler()
+    def __init__(self, texture_compiler: TextureCompiler, cache_dir: Path | None = None) -> None:
+        self._utils_mesh_compiler = WBEUtilsModelCompiler(texture_compiler=texture_compiler, cache_dir=cache_dir)
 
     @override
     def get_supported_resource_types(self) -> list[str]:
@@ -30,23 +31,30 @@ class WBEACPCompilerModel(WBEACPCompiler):
     @override
     def compile(self, resource: ManifestResource, manifest_path: Path,
             res_dir: Path, res_output_dir: Path) -> list[ManifestResource]:
-        resource_path = self._get_source_resource_file(resource)
-        if resource_path is None:
-            raise RuntimeError(
-                f"Model resource must declare a non-empty source file field in {manifest_path}: {resource}."
-            )
-
         resolved_resource = dict(resource)
-        source_path, _ = self._resolve_resource_file_path(resource_path, manifest_path, res_dir)
-        resolved_resource["type"] = "model"
-        resolved_resource["file"] = source_path.as_posix()
+        source_type = self._get_source_resource_type(resource)
+        resolved_resource["type"] = "static_geometry" if source_type == "static_geometry" else "model"
+        if source_type == "static_geometry":
+            source_files = resource.get("source_files")
+            if (not isinstance(source_files, list) or not source_files
+                    or any(not isinstance(path, str) or not path for path in source_files)):
+                raise RuntimeError(f"Static geometry requires a non-empty source_files array of strings in {manifest_path}.")
+            resolved_resource["source_files"] = [
+                self._resolve_resource_file_path(path, manifest_path, res_dir)[0].as_posix()
+                for path in source_files
+            ]
+        else:
+            resource_path = self._get_source_resource_file(resource)
+            if resource_path is None:
+                raise RuntimeError(
+                    f"Model resource must declare a non-empty source file field in {manifest_path}: {resource}."
+                )
+            source_path, _ = self._resolve_resource_file_path(resource_path, manifest_path, res_dir)
+            resolved_resource["file"] = source_path.as_posix()
         resolved_manifest_path = Path.joinpath(res_dir, manifest_path)
-        mesh_resource = self._utils_mesh_compiler.compile_mesh(resolved_resource, resolved_manifest_path, res_dir, res_output_dir)
-        material_resources = self._utils_mesh_compiler.compile_materials(resolved_resource, resolved_manifest_path, res_dir, res_output_dir)
-        # Assimp converts imported UVs to a bottom-left origin, so generated textures must use the same convention.
-        for material_resource in material_resources:
-            for texture_binding in material_resource.get("textures", []):
-                texture = texture_binding["texture"]
-                texture["path"] = texture.pop("file")
-                texture["flip_v"] = True
-        return [mesh_resource] + material_resources
+        return self._utils_mesh_compiler.compile(
+            resolved_resource,
+            resolved_manifest_path,
+            res_dir,
+            res_output_dir,
+        )

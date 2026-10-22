@@ -14,21 +14,27 @@
 
 import json
 import os
+import tomllib
 from pathlib import Path
 from typing import Any
 from build_script.resource.acp.acp_compiler import ManifestData, ManifestResource, SOURCE_RESOURCE_FILE_KEY, SOURCE_RESOURCE_TYPE_KEY, WBEACPCompiler
 
+SOURCE_MANIFEST_SUFFIX = ".toml"
+RUNTIME_MANIFEST_SUFFIX = ".json"
+
 class WBEACP:
     """The asset conditioning pipeline.
 
-    This pipeline consumes manifest files from the source resource directory,
-    compiles/copies entries by resource type, and emits runtime index files
-    into the output resource directory.
+    This pipeline consumes TOML manifest files from the source resource
+    directory, compiles/copies entries by resource type, and emits JSON runtime
+    index files into the output resource directory. A source manifest
+    ``<path>.toml`` is emitted as ``<path>.json``.
     """
 
-    def __init__(self, res_dir: Path, res_output_dir: Path) -> None:
+    def __init__(self, res_dir: Path, res_output_dir: Path, enabled_test: bool = False) -> None:
         self._res_dir = res_dir
         self._res_output_dir = res_output_dir
+        self._enabled_test = enabled_test
         self._compiler_map: dict[str, WBEACPCompiler] = {}
         self._root_manifest_paths: list[str] = []
         self._manifest_sources: dict[str, dict[str, Any]] = {}
@@ -64,8 +70,8 @@ class WBEACP:
     def _load_root_manifest_paths(self) -> list[str]:
         manifest_paths: list[str] = []
         root_manifest_dir = Path.joinpath(self._res_dir, Path("res_chunks"))
-        for json_file in sorted(root_manifest_dir.rglob("*.json")):
-            relative_manifest_path = json_file.relative_to(self._res_dir).as_posix()
+        for manifest_file in sorted(root_manifest_dir.rglob(f"*{SOURCE_MANIFEST_SUFFIX}")):
+            relative_manifest_path = manifest_file.relative_to(self._res_dir).as_posix()
             if not self._load_manifest_source(relative_manifest_path, False):
                 continue
             manifest_paths.append(relative_manifest_path)
@@ -89,8 +95,13 @@ class WBEACP:
                 )
             return False
 
-        with open(manifest_path, "r", encoding="utf-8") as file:
-            data = json.load(file)
+        with open(manifest_path, "rb") as file:
+            try:
+                data = tomllib.load(file)
+            except tomllib.TOMLDecodeError as error:
+                raise RuntimeError(
+                    f"WBEACP: Failed to parse TOML manifest {normalized_manifest_path}: {error}."
+                ) from error
         if not isinstance(data, dict) or "resources" not in data:
             if is_required:
                 raise RuntimeError(
@@ -103,8 +114,14 @@ class WBEACP:
             )
 
         data["include"] = self._normalize_include_paths(data.get("include", []), normalized_manifest_path)
+        self._scope_enabled(data.get("scope", "global"), normalized_manifest_path)
         self._manifest_sources[normalized_manifest_path] = data
         return True
+
+    def _scope_enabled(self, scope: Any, context: str) -> bool:
+        if scope not in ("global", "test_only"):
+            raise RuntimeError(f"WBEACP: Invalid scope '{scope}' in {context}.")
+        return scope == "global" or self._enabled_test
 
     def _normalize_include_paths(self, include_entries: Any, manifest_rel_path: str) -> list[str]:
         if include_entries is None:
@@ -120,12 +137,16 @@ class WBEACP:
                 raise RuntimeError(
                     f"WBEACP: Manifest include entry must be a non-empty string: {manifest_rel_path}."
                 )
+            if Path(include_entry).suffix != SOURCE_MANIFEST_SUFFIX:
+                raise RuntimeError(
+                    f"WBEACP: Manifest include entry must reference a {SOURCE_MANIFEST_SUFFIX} manifest in {manifest_rel_path}: {include_entry}."
+                )
             normalized_include.append(Path(include_entry).as_posix())
         return normalized_include
 
-    def _process_manifest(self, manifest_rel_path: str, include_stack: list[str]) -> None:
+    def _process_manifest(self, manifest_rel_path: str, include_stack: list[str]) -> bool:
         if manifest_rel_path in self._processed_manifests:
-            return
+            return True
         if manifest_rel_path in include_stack:
             recursion_chain = include_stack + [manifest_rel_path]
             raise RuntimeError(
@@ -137,23 +158,29 @@ class WBEACP:
             raise RuntimeError(
                 f"WBEACP: Manifest include target was not found: {manifest_rel_path}."
             )
+        if not self._scope_enabled(source_manifest.get("scope", "global"), manifest_rel_path):
+            return False
 
         include_stack.append(manifest_rel_path)
         include_paths = source_manifest.get("include", [])
+        processed_include_paths: list[str] = []
         for include_path in include_paths:
             if not self._load_manifest_source(include_path, True):
                 raise RuntimeError(
                     f"WBEACP: Manifest include target does not exist: {include_path} (included by {manifest_rel_path})."
                 )
-            self._process_manifest(include_path, include_stack)
+            if self._process_manifest(include_path, include_stack):
+                processed_include_paths.append(include_path)
 
-        processed_manifest = self._process_manifest_data(source_manifest, manifest_rel_path)
+        processed_manifest = self._process_manifest_data(source_manifest, manifest_rel_path, processed_include_paths)
 
         self._write_manifest(manifest_rel_path, processed_manifest)
         self._processed_manifests[manifest_rel_path] = processed_manifest
         include_stack.pop()
+        return True
 
-    def _process_manifest_data(self, manifest_data: ManifestData, manifest_rel_path: str) -> ManifestData:
+    def _process_manifest_data(self, manifest_data: ManifestData, manifest_rel_path: str,
+                               include_paths: list[str]) -> ManifestData:
         manifest_resources = manifest_data.get("resources")
         if not isinstance(manifest_resources, list):
             raise RuntimeError(
@@ -166,17 +193,22 @@ class WBEACP:
                 raise RuntimeError(
                     f"WBEACP: Manifest resource entry must be an object in {manifest_rel_path}."
                 )
+            if not self._scope_enabled(resource.get("scope", "global"), manifest_rel_path):
+                continue
             processed_resources.extend(self._process_typed_resource(resource, manifest_rel_path, True))
 
         processed_manifest: ManifestData = {
             "resources": processed_resources,
         }
         if "include" in manifest_data:
-            processed_manifest["include"] = self._normalize_include_paths(manifest_data.get("include", []), manifest_rel_path)
+            processed_manifest["include"] = [self._get_runtime_manifest_path(include_path) for include_path in include_paths]
         return processed_manifest
 
+    def _get_runtime_manifest_path(self, manifest_rel_path: str) -> str:
+        return Path(manifest_rel_path).with_suffix(RUNTIME_MANIFEST_SUFFIX).as_posix()
+
     def _write_manifest(self, manifest_rel_path: str, manifest_data: dict[str, Any]) -> None:
-        output_path = Path.joinpath(self._res_output_dir, Path(manifest_rel_path))
+        output_path = Path.joinpath(self._res_output_dir, Path(self._get_runtime_manifest_path(manifest_rel_path)))
         os.makedirs(output_path.parent, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as output_file:
             json.dump(manifest_data, output_file, indent=4)
@@ -220,6 +252,8 @@ class WBEACP:
             )
 
         result = dict(resource)
+        if not self._scope_enabled(result.pop("scope", "global"), manifest_rel_path):
+            return []
         source_resource_type = result.get(SOURCE_RESOURCE_TYPE_KEY)
         has_source_resource_type = isinstance(source_resource_type, str) and bool(source_resource_type)
         runtime_resource_type = result.get("type")
@@ -274,9 +308,5 @@ class WBEACP:
         if SOURCE_RESOURCE_TYPE_KEY in result or SOURCE_RESOURCE_FILE_KEY in result:
             raise RuntimeError(
                 f"WBEACP: Resource type '{resource_type}' in {manifest_rel_path} still declares source-only fields after compilation."
-            )
-        if "file" in result:
-            raise RuntimeError(
-                f"WBEACP: Resource type '{resource_type}' declares file in {manifest_rel_path} but has no registered compiler."
             )
         return result

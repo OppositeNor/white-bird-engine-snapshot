@@ -16,6 +16,8 @@
 #define WBE_FILE_PARSER_JSON_TEST_HH
 
 #include "core/parser/parser_json.hh"
+#include "glm/detail/qualifier.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float2.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/ext/vector_float4.hpp"
@@ -56,14 +58,14 @@ TEST(ParserJSONTest, ParseFromBufferEdgeCases) {
 
     // Nested empty objects
     parser.parse_from_buffer(R"({ "empty_obj": {} })");
-    ASSERT_TRUE(parser.get_data().template get_value<WBE::ParserJSON::DataType>("empty_obj").get_all_keys().empty());
+    ASSERT_TRUE(parser.get_data().template get_value<WBE::DataValue>("empty_obj").get_all_keys().empty());
 
     // Deeply nested structures
     parser.parse_from_buffer(R"({ "level1": { "level2": { "level3": { "level4": "deep_value" } } } })");
     ASSERT_STREQ(parser.get_data()
-                     .template get_value<WBE::ParserJSON::DataType>("level1")
-                     .template get_value<WBE::ParserJSON::DataType>("level2")
-                     .template get_value<WBE::ParserJSON::DataType>("level3")
+                     .template get_value<WBE::DataValue>("level1")
+                     .template get_value<WBE::DataValue>("level2")
+                     .template get_value<WBE::DataValue>("level3")
                      .template get_value<std::string>("level4")
                      .c_str(),
         "deep_value");
@@ -100,7 +102,7 @@ TEST(ParserJSONTest, ParseListOfObjects) {
     parser.parse_from_buffer(json_simple_objects);
 
     // Get the list of objects
-    auto users = parser.get_value<std::vector<WBE::JSONData>>("users");
+    auto users = parser.get_value<std::vector<WBE::DataValue>>("users");
     ASSERT_EQ(users.size(), 3);
 
     // Verify first user
@@ -157,7 +159,7 @@ TEST(ParserJSONTest, ParseListOfNestedObjects) {
     parser.parse_from_buffer(json_nested_objects);
 
     // Get the list of products
-    auto products = parser.get_value<std::vector<WBE::JSONData>>("products");
+    auto products = parser.get_value<std::vector<WBE::DataValue>>("products");
     ASSERT_EQ(products.size(), 2);
 
     // Verify first product
@@ -165,12 +167,12 @@ TEST(ParserJSONTest, ParseListOfNestedObjects) {
     ASSERT_EQ(products[0].get_value<std::string>("name"), "Laptop");
 
     // Verify nested details of first product
-    auto details1 = products[0].get_value<WBE::JSONData>("details");
+    auto details1 = products[0].get_value<WBE::DataValue>("details");
     ASSERT_EQ(details1.get_value<std::string>("brand"), "TechCorp");
     ASSERT_EQ(details1.get_value<std::string>("model"), "X1000");
 
     // Verify deeply nested specs
-    auto specs1 = details1.get_value<WBE::JSONData>("specs");
+    auto specs1 = details1.get_value<WBE::DataValue>("specs");
     ASSERT_EQ(specs1.get_value<std::string>("ram"), "16GB");
     ASSERT_EQ(specs1.get_value<std::string>("storage"), "512GB SSD");
 
@@ -185,8 +187,8 @@ TEST(ParserJSONTest, ParseListOfNestedObjects) {
     ASSERT_EQ(products[1].get_value<int>("id"), 102);
     ASSERT_EQ(products[1].get_value<std::string>("name"), "Mouse");
 
-    auto details2 = products[1].get_value<WBE::JSONData>("details");
-    auto specs2 = details2.get_value<WBE::JSONData>("specs");
+    auto details2 = products[1].get_value<WBE::DataValue>("details");
+    auto specs2 = details2.get_value<WBE::DataValue>("specs");
     ASSERT_EQ(specs2.get_value<std::string>("dpi"), "1600");
     ASSERT_EQ(specs2.get_value<std::string>("buttons"), "5");
 
@@ -212,11 +214,11 @@ TEST(ParserJSONTest, ParseEmptyAndMixedLists) {
     parser.parse_from_buffer(json_empty_array);
 
     // Verify empty list
-    auto empty_list = parser.get_value<std::vector<WBE::JSONData>>("empty_list");
+    auto empty_list = parser.get_value<std::vector<WBE::DataValue>>("empty_list");
     ASSERT_EQ(empty_list.size(), 0);
 
     // Verify mixed content list
-    auto mixed_content = parser.get_value<std::vector<WBE::JSONData>>("mixed_content");
+    auto mixed_content = parser.get_value<std::vector<WBE::DataValue>>("mixed_content");
     ASSERT_EQ(mixed_content.size(), 3);
 
     // Verify each mixed item
@@ -383,13 +385,13 @@ TEST(ParserJSONTest, ComplexNestedStructures) {
     parser.parse_from_buffer(complex_json);
 
     // Test top-level access
-    auto app = parser.get_value<WBE::JSONData>("application");
+    auto app = parser.get_value<WBE::DataValue>("application");
     ASSERT_EQ(app.get_value<std::string>("name"), "Test App");
     ASSERT_EQ(app.get_value<std::string>("version"), "1.2.3");
 
     // Test nested features
-    auto features = app.get_value<WBE::JSONData>("features");
-    auto auth = features.get_value<WBE::JSONData>("authentication");
+    auto features = app.get_value<WBE::DataValue>("features");
+    auto auth = features.get_value<WBE::DataValue>("authentication");
     ASSERT_EQ(auth.get_value<bool>("enabled"), true);
 
     // Test array within nested structure
@@ -400,29 +402,29 @@ TEST(ParserJSONTest, ComplexNestedStructures) {
     ASSERT_EQ(methods[2], "token");
 
     // Test deeply nested config
-    auto config = auth.get_value<WBE::JSONData>("config");
+    auto config = auth.get_value<WBE::DataValue>("config");
     ASSERT_EQ(config.get_value<int>("timeout"), 3600);
     ASSERT_EQ(config.get_value<int>("max_attempts"), 3);
 
     // Test providers object
-    auto providers = config.get_value<WBE::JSONData>("providers");
-    auto google = providers.get_value<WBE::JSONData>("google");
+    auto providers = config.get_value<WBE::DataValue>("providers");
+    auto google = providers.get_value<WBE::DataValue>("google");
     ASSERT_EQ(google.get_value<std::string>("client_id"), "google_client_123");
     ASSERT_EQ(google.get_value<bool>("enabled"), true);
 
-    auto facebook = providers.get_value<WBE::JSONData>("facebook");
+    auto facebook = providers.get_value<WBE::DataValue>("facebook");
     ASSERT_EQ(facebook.get_value<std::string>("app_id"), "fb_app_456");
     ASSERT_EQ(facebook.get_value<bool>("enabled"), false);
 
     // Test other nested sections
-    auto logging = features.get_value<WBE::JSONData>("logging");
+    auto logging = features.get_value<WBE::DataValue>("logging");
     ASSERT_EQ(logging.get_value<std::string>("level"), "info");
 
     auto destinations = logging.get_value<std::vector<std::string>>("destinations");
     ASSERT_EQ(destinations.size(), 3);
 
     // Test dependencies array
-    auto dependencies = app.get_value<std::vector<WBE::JSONData>>("dependencies");
+    auto dependencies = app.get_value<std::vector<WBE::DataValue>>("dependencies");
     ASSERT_EQ(dependencies.size(), 3);
     ASSERT_EQ(dependencies[0].get_value<std::string>("name"), "nlohmann-json");
     ASSERT_EQ(dependencies[0].get_value<bool>("required"), true);
@@ -454,7 +456,7 @@ TEST(ParserJSONTest, ArrayVariations) {
     parser.parse_from_buffer(array_json);
 
     // Test empty array
-    auto empty_array = parser.get_value<std::vector<WBE::JSONData>>("empty_array");
+    auto empty_array = parser.get_value<std::vector<WBE::DataValue>>("empty_array");
     ASSERT_EQ(empty_array.size(), 0);
 
     // Test string array
@@ -474,7 +476,7 @@ TEST(ParserJSONTest, ArrayVariations) {
     ASSERT_EQ(boolean_array[1], false);
 
     // Test array of objects
-    auto object_array = parser.get_value<std::vector<WBE::JSONData>>("array_of_objects");
+    auto object_array = parser.get_value<std::vector<WBE::DataValue>>("array_of_objects");
     ASSERT_EQ(object_array.size(), 3);
     ASSERT_EQ(object_array[1].get_value<int>("id"), 2);
 
@@ -536,7 +538,7 @@ TEST(ParserJSONTest, KeyManagementAndUtilities) {
     ASSERT_EQ(keys, expected_keys);
 
     // Test nested key access
-    auto nested = parser.get_value<WBE::JSONData>("nested");
+    auto nested = parser.get_value<WBE::DataValue>("nested");
     auto nested_keys = nested.get_all_keys();
     ASSERT_EQ(nested_keys.size(), 2);
 
@@ -600,9 +602,32 @@ TEST(ParserJSONTest, ParseGLMVectorsMissingFields) {
     ASSERT_THROW(parser.get_value<glm::vec4>("v4"), std::exception);
 }
 
+TEST(ParserJSONTest, GLMMat4RoundTripAndValidation) {
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(R"({"matrix": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]})");
+
+    glm::mat4 matrix = parser.get_value<glm::mat4>("matrix");
+    for (glm::length_t column = 0; column < 4; ++column) {
+        for (glm::length_t row = 0; row < 4; ++row) {
+            ASSERT_FLOAT_EQ(matrix[column][row], static_cast<float>(column * 4 + row + 1));
+        }
+    }
+
+    WBE::DataValue keyed_data;
+    keyed_data.set_value("matrix", matrix);
+    EXPECT_EQ(keyed_data.get_value<glm::mat4>("matrix"), matrix);
+
+    WBE::DataValue root_data;
+    root_data.set(matrix);
+    EXPECT_EQ(root_data.get<glm::mat4>(), matrix);
+
+    parser.parse_from_buffer(R"({"matrix": [1, 2, 3]})");
+    EXPECT_THROW(parser.get_value<glm::mat4>("matrix"), std::runtime_error);
+}
+
 TEST(ParserJSONTest, JSONDataSetMethod) {
-    // Test setting primitive values, arrays and nested JSONData via set()
-    WBE::JSONData root;
+    // Test setting primitive values, arrays and nested DataValue via set()
+    WBE::DataValue root;
 
     // Primitives
     root.set_value("fruit", std::string("apple"));
@@ -621,28 +646,28 @@ TEST(ParserJSONTest, JSONDataSetMethod) {
     ASSERT_EQ(nums[1], 20);
     ASSERT_EQ(nums[2], 30);
 
-    // Nested JSONData by copy
-    WBE::JSONData child;
+    // Nested DataValue by copy
+    WBE::DataValue child;
     child.set_value("key1", "value1");
     child.set_value("key2", 777);
     root.set_value("child_copy", child); // should store child's internal json
 
-    auto child_copy = root.get_value<WBE::JSONData>("child_copy");
+    auto child_copy = root.get_value<WBE::DataValue>("child_copy");
     ASSERT_EQ(child_copy.get_value<std::string>("key1"), "value1");
     ASSERT_EQ(child_copy.get_value<int>("key2"), 777);
 
-    // Nested JSONData by move (rvalue)
-    WBE::JSONData child_move;
+    // Nested DataValue by move (rvalue)
+    WBE::DataValue child_move;
     child_move.set_value("moved", "yes");
     root.set_value("child_move", std::move(child_move));
 
-    auto child_moved = root.get_value<WBE::JSONData>("child_move");
+    auto child_moved = root.get_value<WBE::DataValue>("child_move");
     ASSERT_EQ(child_moved.get_value<std::string>("moved"), "yes");
 }
 
 TEST(ParserJSONTest, JSONDataSetAssignMethod) {
     // Test the single-argument set(T&&) that assigns the current data value
-    WBE::JSONData root;
+    WBE::DataValue root;
 
     // Primitives
     root.set(std::string("apple"));
@@ -676,21 +701,21 @@ TEST(ParserJSONTest, JSONDataSetAssignMethod) {
     ASSERT_FLOAT_EQ(v_out.y, 2.0F);
     ASSERT_FLOAT_EQ(v_out.z, 3.0F);
 
-    // Nested JSONData by copy
-    WBE::JSONData child;
+    // Nested DataValue by copy
+    WBE::DataValue child;
     child.set_value("key1", "value1");
     child.set_value("key2", 777);
     root.set(child);
 
-    auto child_copy = root.get<WBE::JSONData>();
+    auto child_copy = root.get<WBE::DataValue>();
     ASSERT_EQ(child_copy.get_value<std::string>("key1"), "value1");
     ASSERT_EQ(child_copy.get_value<int>("key2"), 777);
 
-    // Nested JSONData by move
-    WBE::JSONData child_move2;
+    // Nested DataValue by move
+    WBE::DataValue child_move2;
     child_move2.set_value("moved", "yes");
     root.set(std::move(child_move2));
-    auto child_moved2 = root.get<WBE::JSONData>();
+    auto child_moved2 = root.get<WBE::DataValue>();
     ASSERT_EQ(child_moved2.get_value<std::string>("moved"), "yes");
 }
 

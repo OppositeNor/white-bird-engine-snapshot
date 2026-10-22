@@ -24,7 +24,7 @@
 #include "core/profiling/profiler.hh"
 #include "core/reflection/reflection_defs.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 
 namespace WBE = WhiteBirdEngine;
 namespace WhiteBirdEngine {
@@ -32,7 +32,7 @@ WBE_LABEL(WBE_TEST_PROFILING_CHANNEL, WBE_CHANNEL)
 }
 
 TEST(WBEProfilerTest, Profiling) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     uint32_t line_num = 0;
     {
         WBE_START_PROFILE(WBE::WBE_TEST_PROFILING_CHANNEL, "Test profile");

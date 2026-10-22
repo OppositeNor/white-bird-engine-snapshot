@@ -20,7 +20,7 @@
 #include "core/memory/unique.hh"
 #include "global/global.hh"
 #include "mock_heap_allocator_aligned.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include <gtest/gtest.h>
 #include <memory>
 #include <stdexcept>
@@ -30,7 +30,7 @@ namespace WBE = WhiteBirdEngine;
 
 struct Dummy {
     int x;
-    Dummy(int p_v) : x(p_v) {
+    explicit Dummy(int p_v) : x(p_v) {
     }
     ~Dummy() {
         x = -1;
@@ -39,11 +39,11 @@ struct Dummy {
 
 class WBEUniqueTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -233,7 +233,7 @@ TEST_F(WBEUniqueTest, MemIDConstructorValidation) {
 // Helper classes for template conversion testing
 struct Base {
     int value;
-    Base(int p_v) : value(p_v) {
+    explicit Base(int p_v) : value(p_v) {
     }
     virtual ~Base() = default;
 };

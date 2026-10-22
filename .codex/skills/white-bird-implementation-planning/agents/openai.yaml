@@ -1,0 +1,4 @@
+interface:
+  display_name: "White Bird Implementation Planning"
+  short_description: "Create decision-complete engine implementation plans"
+  default_prompt: "Use $white-bird-implementation-planning to produce a repository-grounded implementation plan with exact files, symbols, build integration, and validation."

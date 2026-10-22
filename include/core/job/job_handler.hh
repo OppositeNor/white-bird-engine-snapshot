@@ -15,9 +15,16 @@
 #ifndef WBE_FILE_JOB_HANDLER_HH
 #define WBE_FILE_JOB_HANDLER_HH
 
-#include "utils/defs.hh"
 #include <functional>
+#include <future>
 namespace WhiteBirdEngine {
+
+inline std::future<void> create_completed_job_future() {
+    std::promise<void> promise;
+    std::future<void> future = promise.get_future();
+    promise.set_value();
+    return future;
+}
 
 /**
  * @class JobHandler
@@ -38,7 +45,7 @@ public:
      *
      * @param p_job The job to add.
      */
-    virtual void add_job(std::function<void()> p_job) = 0;
+    virtual std::future<void> add_job(std::function<void()> p_job) = 0;
 };
 
 } // namespace WhiteBirdEngine

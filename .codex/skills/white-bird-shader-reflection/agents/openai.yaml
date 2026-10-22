@@ -1,0 +1,4 @@
+interface:
+  display_name: "White Bird Shader Reflection"
+  short_description: "Use and extend shader reflection metadata"
+  default_prompt: "Use $white-bird-shader-reflection to acquire shader parameters from a resource or extend the reflection pipeline."

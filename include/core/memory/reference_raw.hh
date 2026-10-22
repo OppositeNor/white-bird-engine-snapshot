@@ -34,7 +34,7 @@ namespace WhiteBirdEngine {
  * @tparam T The type of the resource.
  * @tparam AllocType The type of the allocator.
  */
-template <typename T, typename AllocType = HeapAllocator, bool AllowDestruct = true>
+template <typename T, typename AllocType = HeapAllocator, bool AllowDestruct = false>
 class RefRaw {
     template <typename T1, typename AllocType1, bool AllowDestruct1>
     friend class RefRaw;
@@ -103,6 +103,10 @@ public:
     RefRaw& operator=(const RefRaw<T1, AllocType1, AllowDestruct1>& p_other) {
         mem_id = p_other.mem_id;
         allocator = p_other.allocator;
+        return *this;
+    }
+    RefRaw& operator=(std::nullptr_t) {
+        mem_id = MEM_NULL;
         return *this;
     }
     template <typename T1, typename AllocType1, bool AllowDestruct1>

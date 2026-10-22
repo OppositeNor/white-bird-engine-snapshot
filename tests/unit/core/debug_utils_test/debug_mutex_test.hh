@@ -18,7 +18,7 @@
 #include "boost/thread/lock_types.hpp"
 #include "core/debug_utils/debug_mutex.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 
 #include <atomic>
 #include <chrono>
@@ -34,11 +34,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEDebugMutexTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -62,7 +62,7 @@ TEST_F(WBEDebugMutexTest, ExclusiveMutexTryLockWhenLocked) {
 
     std::atomic<bool> try_lock_result{true};
     std::atomic<bool> is_unique_locked{true};
-    std::thread thread([&]() {
+    std::thread thread([&] {
         try_lock_result = mutex.try_lock();
         is_unique_locked = mutex.is_unique_locked_by_current_thread();
     });
@@ -79,7 +79,7 @@ TEST_F(WBEDebugMutexTest, IsCurrentTheadUniqueLocked) {
     std::vector<std::thread> threads;
     threads.reserve(THREAD_COUNT);
     for (size_t i = 0; i < THREAD_COUNT; ++i) {
-        threads.emplace_back([&]() {
+        threads.emplace_back([&] {
             for (size_t j = 0; j < ITERATION_COUNT; ++j) {
                 // Should not be true when current thread does not hold the unique lock.
                 EXPECT_FALSE(mutex.is_unique_locked_by_current_thread());
@@ -139,7 +139,7 @@ TEST_F(WBEDebugMutexTest, TryLockWhenLocked) {
     // Second thread tries to lock - should fail
     std::atomic<bool> try_lock_result{false};
     std::atomic<bool> is_unique_locked{false};
-    std::thread t([&]() {
+    std::thread t([&] {
         try_lock_result = mutex.try_lock();
         is_unique_locked = mutex.is_unique_locked_by_current_thread();
     });
@@ -186,7 +186,7 @@ TEST_F(WBEDebugMutexTest, MultipleSharedLocks) {
 
     threads.reserve(NUM_READERS);
     for (int i = 0; i < NUM_READERS; ++i) {
-        threads.emplace_back([&]() {
+        threads.emplace_back([&] {
             mutex.lock_shared();
 
             // Track concurrent readers
@@ -225,7 +225,7 @@ TEST_F(WBEDebugMutexTest, UniqueBlocksShared) {
     EXPECT_TRUE(mutex.is_unique_locked_by_current_thread());
 
     // Background thread tries to acquire shared lock
-    std::thread t([&]() {
+    std::thread t([&] {
         mutex.lock_shared();
         shared_acquired = true;
         EXPECT_FALSE(mutex.is_unique_locked_by_current_thread());
@@ -256,7 +256,7 @@ TEST_F(WBEDebugMutexTest, SharedBlocksUnique) {
     EXPECT_FALSE(mutex.is_unique_locked_by_current_thread());
 
     // Background thread tries to acquire unique lock
-    std::thread t([&]() {
+    std::thread t([&] {
         mutex.lock();
         unique_acquired = true;
         EXPECT_TRUE(mutex.is_unique_locked_by_current_thread());
@@ -287,7 +287,7 @@ TEST_F(WBEDebugMutexTest, TrySharedLockWhenUniqueLocked) {
     // Background thread tries try_lock_shared
     std::atomic<bool> try_shared_result{true}; // Initialize to true to detect failure
     std::atomic<bool> is_unique_locked{true};
-    std::thread t([&]() {
+    std::thread t([&] {
         try_shared_result = mutex.try_lock_shared();
         is_unique_locked = mutex.is_unique_locked_by_current_thread();
         if (try_shared_result) {
@@ -313,7 +313,7 @@ TEST_F(WBEDebugMutexTest, TryUniqueLockWhenSharedLocked) {
     // Background thread tries try_lock (unique)
     std::atomic<bool> try_unique_result{true}; // Initialize to true to detect failure
     std::atomic<bool> is_unique_locked{false};
-    std::thread t([&]() {
+    std::thread t([&] {
         try_unique_result = mutex.try_lock();
         is_unique_locked = mutex.is_unique_locked_by_current_thread();
         if (try_unique_result) {
@@ -339,7 +339,7 @@ TEST_F(WBEDebugMutexTest, OwnershipTracking) {
     EXPECT_TRUE(mutex.is_unique_locked_by_current_thread());
 
     // Other thread should not see itself as owner
-    std::thread t([&]() {
+    std::thread t([&] {
         other_thread_id = std::this_thread::get_id();
         other_thread_sees_unique = mutex.is_unique_locked_by_current_thread();
     });
@@ -364,7 +364,7 @@ TEST_F(WBEDebugMutexTest, OwnershipAfterUnlock) {
 
     // Another thread should be able to acquire and be tracked
     std::atomic<bool> other_thread_unique{false};
-    std::thread t([&]() {
+    std::thread t([&] {
         mutex.lock();
         other_thread_unique = mutex.is_unique_locked_by_current_thread();
         mutex.unlock();
@@ -385,7 +385,7 @@ TEST_F(WBEDebugMutexTest, StressTestOwnershipTracking) {
     std::vector<std::thread> threads;
     threads.reserve(NUM_THREADS);
     for (int i = 0; i < NUM_THREADS; ++i) {
-        threads.emplace_back([&]() {
+        threads.emplace_back([&] {
             for (int j = 0; j < ITERATIONS; ++j) {
                 // Test unique lock ownership
                 EXPECT_FALSE(mutex.is_unique_locked_by_current_thread());

@@ -13,7 +13,10 @@
    limitations under the License.
 */
 #include "core/profiling/profiling_manager.hh"
+#include "generated/label_manager.gen.hh"
+#include "utils/utils.hh"
 #include <mutex>
+#include <string>
 #include <utility>
 
 namespace WhiteBirdEngine {
@@ -26,5 +29,9 @@ void ProfilingManager::push_profiling_data(ProfileData&& p_profile_data) {
 void ProfilingManager::push_profiling_data(const ProfileData& p_profile_data) {
     std::unique_lock lock(profile_stash_mutex);
     profile_stash[p_profile_data.channel].push_back(p_profile_data);
+}
+
+const std::string& ProfilingManager::get_label_name(HashCode p_label) {
+    return EngineCore::get_singleton()->label_manager->get_label_name(p_label);
 }
 } // namespace WhiteBirdEngine

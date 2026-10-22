@@ -1,0 +1,4 @@
+interface:
+  display_name: "White Bird C++ Reflection"
+  short_description: "Use and extend C++ reflection codegen"
+  default_prompt: "Use $white-bird-cpp-reflection to add or consume reflected C++ metadata safely."

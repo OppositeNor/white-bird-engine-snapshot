@@ -168,20 +168,12 @@ def run_clang_format_fix(file_path: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
-def has_remaining_lints(file_path: str, compile_commands_dir: Path) -> bool:
-    result = run_clang_tidy_check(file_path, compile_commands_dir)
-    output = f"{result.stdout}\n{result.stderr}"
-    return re.search(r"\b(warning|error):", output) is not None
-
-
-def fix_and_check_file(file_path: str, compile_commands_dir: Path) -> tuple[str, bool, bool]:
+def fix_and_check_file(file_path: str, compile_commands_dir: Path) -> tuple[str, bool, bool, str]:
     fix_result = run_clang_tidy_fix(file_path, compile_commands_dir)
     format_fix_result = run_clang_format_fix(file_path)
-    has_unfixed_lints = has_remaining_lints(file_path, compile_commands_dir)
-    format_check_result = run_clang_format_check(file_path)
-    has_unfixed_format = format_check_result.returncode != 0
+    _, _, has_unfixed_diag, remaining_output = check_file(file_path, compile_commands_dir)
     run_failed = fix_result.returncode != 0 or format_fix_result.returncode != 0
-    return file_path, run_failed, has_unfixed_lints or has_unfixed_format
+    return file_path, run_failed, has_unfixed_diag, remaining_output
 
 
 def check_file(file_path: str, compile_commands_dir: Path) -> tuple[str, bool, bool, str]:
@@ -325,11 +317,12 @@ def main() -> int:
             source = future_to_source[future]
             if args.fix:
                 print(f"[{completed_count}/{total_sources}] clang-tidy --fix {source}")
-                file_path, fix_failed, has_unfixed_lints = future.result()
+                file_path, fix_failed, has_unfixed_lints, output = future.result()
                 if fix_failed:
                     failed_runs.append(file_path)
                 if has_unfixed_lints:
                     linted_files.append(file_path)
+                    lint_outputs[file_path] = output
             else:
                 print(f"[{completed_count}/{total_sources}] clang-tidy {source}")
                 file_path, check_failed, has_lints, output = future.result()
@@ -347,10 +340,16 @@ def main() -> int:
             print(f"  - {file_path}")
 
     if args.fix:
+        fix_output_path = root_dir / "build" / "lint_fix_output.txt"
+        fix_output_path.parent.mkdir(parents=True, exist_ok=True)
+        with fix_output_path.open("w", encoding="utf-8") as fix_output_file:
+            for file_path in sorted(linted_files):
+                fix_output_file.write(f"== {file_path} ==\n{lint_outputs[file_path]}\n\n")
         if linted_files:
             print("WBECheckLint: These files still have diagnostics after auto-fix:")
             for file_path in linted_files:
                 print(f"  - {file_path}")
+            print(f"WBECheckLint: Remaining diagnostics written to {fix_output_path}")
         if failed_runs or linted_files:
             return 1
         print("WBECheckLint: No remaining diagnostics were found after auto-fix.")

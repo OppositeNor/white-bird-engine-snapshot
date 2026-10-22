@@ -15,7 +15,6 @@
 #ifndef WBE_FILE_FILE_SYSTEM_HH
 #define WBE_FILE_FILE_SYSTEM_HH
 
-#include "platform/file_system/directory.hh"
 #include "platform/file_system/path.hh"
 #include "utils/interface/i_singleton.hh"
 #include <string>
@@ -41,7 +40,7 @@ public:
      *
      * @param p_root_dir The path of the root directory.
      */
-    FileSystem(const Directory& p_root_dir);
+    FileSystem(const Path& p_root_dir);
 
     /**
      * @brief Get the singleton.
@@ -53,19 +52,11 @@ public:
     }
 
     /**
-     * @brief Parse a directory from a string.
-     *
-     * @param p_str The string to parse directory from.
-     * @return The directory parsed.
-     */
-    static Directory parse_directory(std::string_view p_str);
-
-    /**
      * @brief Get the directory of the executable file.
      *
      * @return The directory of the executable file.
      */
-    const Directory& get_root_directory() const {
+    const Path& get_root_directory() const {
         return root_directory;
     }
 
@@ -74,7 +65,7 @@ public:
      *
      * @return The resource directory.
      */
-    const Directory& get_resource_directory() const {
+    const Path& get_resource_directory() const {
         return resource_directory;
     }
 
@@ -83,16 +74,9 @@ public:
      *
      * @return The config directory.
      */
-    const Directory& get_config_directory() const {
+    const Path& get_config_directory() const {
         return config_directory;
     }
-
-    /**
-     * @brief Cast the directory to a string.
-     *
-     * @return The string of the directory.
-     */
-    static std::string dir_to_string(const Directory& p_directory);
 
     /**
      * @brief Get the name of a file.
@@ -107,7 +91,7 @@ public:
      * @param p_path The path to the file.
      * @return The directory of the file.
      */
-    static Directory get_file_dir(std::string_view p_path);
+    static Path get_file_dir(std::string_view p_path);
 
     /**
      * @brief Get the path from a string.
@@ -116,7 +100,7 @@ public:
      * @return The path instance.
      */
     Path get_file_path(std::string_view p_path) const {
-        return Path(get_file_dir(p_path), get_file_name(p_path));
+        return Path(p_path).lexically_normal();
     }
 
     /**
@@ -138,36 +122,14 @@ public:
      *
      * @return The directory of the executable.
      */
-    static Directory get_executable_dir();
+    static Path get_executable_dir();
 
 private:
-    Directory root_directory;
-    Directory resource_directory;
-    Directory config_directory;
+    Path root_directory;
+    Path resource_directory;
+    Path config_directory;
     inline static FileSystem* singleton = nullptr;
 };
-
-/**
- * @brief Combine a directory with a path.
- *
- * @param p_dir The directory to combine.
- * @param p_path The path to combine.
- * @return The combined path: "p_dir/p_path"
- */
-inline Path combine(const Directory& p_dir, const Path& p_path) {
-    return Path(p_dir.combine(p_path.get_directory()), p_path.get_file_name());
-}
-
-/**
- * @brief Combine one directory with another.
- *
- * @param p_dir1 The base directory.
- * @param p_dir2 The directory to combine.
- * @return The combined directory: "p_dir1/p_dir2"
- */
-inline Directory combine(const Directory& p_dir1, const Directory& p_dir2) {
-    return p_dir1.combine(p_dir2);
-}
 
 } // namespace WhiteBirdEngine
 

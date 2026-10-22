@@ -32,12 +32,20 @@
 #define WBE_ENABLE_PROFILING 0
 #endif
 
-#if __GNUC__
-// TODO: fix this
+#if defined(__clang__)
+// Disable optimization for a function.
+#define WBE_NO_OPTIMIZE __attribute__((optnone))
+#elif defined(__GNUC__)
+// Disable optimization for a function.
 #define WBE_NO_OPTIMIZE __attribute__((optimize("O0")))
 #else
-#pragma message(Please indicate the "no optimization" attribute here for your compiler.)
+#pragma message("Please indicate the \"no optimization\" attribute here for your compiler.")
+#define WBE_NO_OPTIMIZE
 #endif
+
+// Concatenate two tokens after macro-expanding them.
+#define WBE_CONCAT(a, b) WBE_CONCAT_IMPL(a, b)
+#define WBE_CONCAT_IMPL(a, b) a##b
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 // Platform is little endian.
@@ -82,7 +90,7 @@
 #define WBE_TYPE_ID_NAME(type_id) WhiteBirdEngine::TypeIDTrait<WhiteBirdEngine::TypeIDRevTrait<type_id>::Type>::TYPE_NAME
 
 // Kilobyte
-#define WBE_KB(x) ((x) * 1000)
+#define WBE_K_B(x) ((x) * 1000)
 // Megabyte
 #define WBE_M_B(x) ((x) * WBE_K_B(1000))
 // Gigabyte

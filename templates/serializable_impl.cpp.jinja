@@ -25,10 +25,10 @@ namespace WhiteBirdEngine {
 {% for serializable in metadata.classes %}
 {% if serializable.attribute | select("in", serializables) | list | length > 0  %}
 
-void {{ serializable.name }}::serialize(JSONData& p_data) const {
+void {{ serializable.name }}::serialize(DataValue& p_data) const {
     SerializableSD<{{ serializable.name }}>::serialize(p_data, *this);
 }
-void {{ serializable.name }}::deserialize(const JSONData& p_data) {
+void {{ serializable.name }}::deserialize(const DataValue& p_data) {
     SerializableSD<{{ serializable.name }}>::deserialize(p_data, *this);
 }
 {% endif %}

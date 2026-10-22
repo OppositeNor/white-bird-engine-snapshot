@@ -15,244 +15,105 @@
 #ifndef WBE_FILE_PARSER_HH
 #define WBE_FILE_PARSER_HH
 
+#include "core/data/data_value.hh"
 #include "platform/file_system/path.hh"
-#include "utils/defs.hh"
 #include <string>
 #include <string_view>
 #include <vector>
+
 namespace WhiteBirdEngine {
 
 /**
- * @class ParserData
- * @brief Data for the parser.
- *
- * @tparam ChildType The type of the child class for CRTP
- */
-template <typename ChildType>
-class ParserData {
-public:
-    /**
-     * @brief Get all the key values.
-     */
-    std::vector<std::string> get_all_keys() const {
-        return static_cast<const ChildType*>(this)->get_all_keys();
-    }
-
-    /**
-     * @brief Set a value. If the value was not recorded, a new value will be
-     * created.
-     *
-     * @tparam T The type of the value to set.
-     * @param p_key The key of the value.
-     * @param p_value The value to set to.
-     */
-    template <typename T>
-    void set_value(std::string_view p_key, T&& p_value) {
-        static_cast<ChildType*>(this)->set_value(p_key, std::forward<T>(p_value));
-    }
-
-    /**
-     * @brief Set the current parser data to a value.
-     *
-     * @tparam T The type of the value to set.
-     * @param p_value The value to set to.
-     */
-    template <typename T>
-    void set(T&& p_value) {
-        static_cast<ChildType*>(this)->set(std::forward<T>(p_value));
-    }
-
-    /**
-     * @brief Get the value of the parser data from a key.
-     *
-     * @tparam T The type of the value to get.
-     * @param p_key The key of the value.
-     * @return The value of the key.
-     */
-    template <typename T>
-    T get_value(std::string_view p_key) const {
-        return static_cast<const ChildType*>(this)->template get_value<T>(p_key);
-    }
-
-    /**
-     * @brief Get the value of the parser data.
-     *
-     * @tparam T The type of the value to get.
-     * @return The value of the key.
-     */
-    template <typename T>
-    T get() const {
-        return static_cast<const ChildType*>(this)->get();
-    }
-
-    /**
-     * @brief Get a value.
-     *
-     * @tparam T The type of the value.
-     * @param p_value The value to write to.
-     */
-    template <typename T>
-    void get(T& p_value) const {
-        static_cast<const ChildType*>(this)->get(p_value);
-    }
-
-    /**
-     * @brief Get a value.
-     *
-     * @tparam T The type of the value.
-     * @param p_key The key to get value from.
-     * @param p_value The value to write to.
-     */
-    template <typename T>
-    void get(std::string_view p_key, T& p_value) const {
-        return static_cast<const ChildType*>(this)->get(p_key, p_value);
-    }
-
-    /**
-     * @brief Check if contains a key.
-     *
-     * @return True if contains a key, false otherwise.
-     */
-    bool contains(std::string_view p_key) const {
-        return static_cast<const ChildType*>(this)->contains(p_key);
-    }
-};
-
-WBE_DECL_CRTP_CONCEPT(ParserData);
-
-template <ParserDataConcept ParserDataType>
-inline std::ostream& operator<<(std::ostream& p_ostream, const ParserData<ParserDataType>& p_parser) {
-    return operator<<(p_ostream, p_parser);
-}
-
-/**
  * @class Parser
- * @brief Parser interface.
+ * @brief Base of the text-format parsers: reads a document into a DataValue tree, which the accessors then read.
  *
- * @tparam ChildType The type of the child class for CRTP
+ * A parser only supports a text format; the parsed data, and every conversion to and from C++ types, is the format-neutral
+ * DataValue. A parse replaces the held data. Copyable and movable; not thread-safe.
  */
-template <typename ChildType>
 class Parser {
 public:
     Parser() = default;
-    ~Parser() = default;
+    virtual ~Parser() = default;
     Parser(const Parser&) = default;
-    Parser(Parser&&) = default;
+    Parser(Parser&&) noexcept = default;
     Parser& operator=(const Parser&) = default;
-    Parser& operator=(Parser&&) = default;
+    Parser& operator=(Parser&&) noexcept = default;
 
     /**
-     * @brief Parse a file from a path.
-     *
-     * @param p_path The path to parse file from.
+     * @brief Parse a file.
+     * @throws std::runtime_error If the file cannot be read or is not a valid document of the format.
      */
-    void parse(const Path& p_path) {
-        return static_cast<ChildType*>(this)->parse(p_path);
+    virtual void parse(const Path& p_path) = 0;
+
+    /**
+     * @brief Parse a document held in memory.
+     * @throws std::runtime_error If the buffer is not a valid document of the format.
+     */
+    virtual void parse_from_buffer(std::string_view p_buffer) = 0;
+
+    /**
+     * @brief Get the parsed data.
+     */
+    const DataValue& get_data() const {
+        return data;
     }
 
     /**
-     * @brief Parse a file from buffer.
-     *
-     * @param p_buffer The buffer to parse from.
+     * @brief Get the parsed data.
      */
-    void parse_from_buffer(std::string_view p_buffer) {
-        return static_cast<ChildType*>(this)->parse_from_buffer(p_buffer);
+    DataValue& get_data() {
+        return data;
     }
 
     /**
-     * @brief Get the value of a given key.
-     *
-     * @tparam T The type of the value.
-     * @param p_key The key to get value from.
-     * @return The value of the key.
+     * @brief Convert the entry under a key of the parsed data; see DataValue::get_value().
      */
     template <typename T>
     T get_value(std::string_view p_key) const {
-        return static_cast<const ChildType*>(this)->template get_value<T>(p_key);
+        return data.get_value<T>(p_key);
     }
 
     /**
-     * @brief Get the value of a given key.
-     *
-     * @tparam T The type of the value.
-     * @param p_key The key to get value from.
-     * @param p_val The output value of the key.
+     * @brief Convert the entry under a key of the parsed data into p_value; see DataValue::get_value().
      */
     template <typename T>
-    void get_value(std::string_view p_key, T& p_val) const {
-        static_cast<const ChildType*>(this)->template get_value<T>(p_key, p_val);
+    void get_value(std::string_view p_key, T& p_value) const {
+        data.get_value<T>(p_key, p_value);
     }
 
     /**
-     * @brief Get the value.
-     *
-     * @tparam T The type of the value.
-     * @return The value.
+     * @brief Convert the parsed data; see DataValue::get().
      */
     template <typename T>
     T get() const {
-        return static_cast<const ChildType*>(this)->template get<T>();
+        return data.get<T>();
     }
 
     /**
-     * @brief Get the value.
-     *
-     * @tparam T The type of the value.
-     * @param p_val The output value.
+     * @brief Convert the parsed data into p_value; see DataValue::get().
      */
     template <typename T>
-    void get(T& p_val) const {
-        static_cast<const ChildType*>(this)->template get<T>(p_val);
+    void get(T& p_value) const {
+        data.get<T>(p_value);
     }
 
     /**
-     * @brief Get all the key values.
+     * @brief Get the keys of the parsed data; see DataValue::get_all_keys().
      */
     std::vector<std::string> get_all_keys() const {
-        return static_cast<const ChildType*>(this)->get_all_keys();
+        return data.get_all_keys();
     }
 
     /**
-     * @brief Get the data of the parser.
-     *
-     * @return The data of the paraser.
-     */
-    const auto& get_data() const {
-        return static_cast<const ChildType*>(this)->get_data();
-    }
-
-    /**
-     * @brief Get the data of the parser.
-     *
-     * @return The data of the parser.
-     */
-    auto& get_data() {
-        return static_cast<ChildType*>(this)->get_data();
-    }
-
-    /**
-     * @brief Check if contains a key.
-     *
-     * @return True if contains a key, false otherwise.
+     * @brief Check whether the parsed data has an entry for a key; see DataValue::contains().
      */
     bool contains(std::string_view p_key) const {
-        return static_cast<const ChildType*>(this)->contains(p_key);
+        return data.contains(p_key);
     }
 
-    /**
-     * @brief Get the value and set.
-     *
-     * @tparam T The type of the value to get.
-     * @param p_key The key of the value.
-     * @param p_value The value reference to be set.
-     */
-    template <typename T>
-    void get_value(std::string_view p_key, T&& p_value) const {
-        return static_cast<const ChildType*>(this)->get_value(p_key, std::forward<T>(p_value));
-    }
+protected:
+    DataValue data;
 };
-
-WBE_DECL_CRTP_CONCEPT(Parser);
 
 } // namespace WhiteBirdEngine
 

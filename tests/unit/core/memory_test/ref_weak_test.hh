@@ -19,7 +19,7 @@
 #include "core/memory/reference_weak.hh"
 #include "global/global.hh"
 #include "mock_heap_allocator_aligned.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include <cstdint>
 #include <cstdlib>
 #include <gtest/gtest.h>
@@ -32,7 +32,7 @@ namespace WBE = WhiteBirdEngine;
 
 class TestClassWeak {
 public:
-    TestClassWeak(std::stringstream& p_ss) : ss(&p_ss) {
+    explicit TestClassWeak(std::stringstream& p_ss) : ss(&p_ss) {
         (*ss) << "Construct.\n";
     }
 
@@ -54,7 +54,7 @@ public:
 };
 
 TEST(WBERefWeakTest, General) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     std::stringstream test_ss;
     {
@@ -79,7 +79,7 @@ TEST(WBERefWeakTest, General) {
 }
 
 TEST(WBERefWeakTest, FirstStrongDestruct) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     {
         WBE::RefWeak<int> ref_weak;
@@ -95,7 +95,7 @@ TEST(WBERefWeakTest, FirstStrongDestruct) {
 }
 
 TEST(WBERefWeakTest, FirstWeakDestruct) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     {
         WBE::Ref<int> ref = WBE::make_ref<int>(&pool_allocator, 3);
@@ -113,7 +113,7 @@ TEST(WBERefWeakTest, FirstWeakDestruct) {
 
 class TestClassWeakChild : public TestClassWeak {
 public:
-    TestClassWeakChild(std::stringstream& p_ss) : TestClassWeak(p_ss) {
+    explicit TestClassWeakChild(std::stringstream& p_ss) : TestClassWeak(p_ss) {
         (*ss) << "Child construct.\n";
     }
 
@@ -132,7 +132,7 @@ public:
 };
 
 TEST(WBERefWeakTest, Polymorphic) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     std::stringstream test_ss;
     {
@@ -201,7 +201,7 @@ inline void multithread_ref_weak_test(WBE::Ref<TestClassWeak> p_ref1, WBE::Ref<T
 }
 
 TEST(WBERefWeak, Multithread) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     std::stringstream test_ss1;
     std::stringstream test_ss2;
@@ -229,7 +229,7 @@ TEST(WBERefWeak, Multithread) {
 }
 
 TEST(WBERefWeak, InvaldLockTest) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     {
         WBE::RefWeak<int> ref_weak;
@@ -302,7 +302,7 @@ inline void multithread_ref_strong_and_weak_test(
 }
 
 TEST(WBERefStrongWeak, Multithread) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     std::stringstream test_ss1;
     std::stringstream test_ss2;
@@ -330,7 +330,7 @@ TEST(WBERefStrongWeak, Multithread) {
 }
 
 TEST(WBERefWeakTest, IsNullMethod_Behavior) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     WBE::MockHeapAllocatorAligned pool_allocator(1024);
     {
         // Default-constructed weak should not be NULL.

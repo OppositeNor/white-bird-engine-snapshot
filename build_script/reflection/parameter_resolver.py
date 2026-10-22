@@ -14,10 +14,7 @@
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass  # kept for future use
+from typing import Any
 
 from build_script.reflection.gen_file_info import WBEGenFileInfo
 

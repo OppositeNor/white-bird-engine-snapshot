@@ -18,10 +18,13 @@
 #include "core/core_utils.hh"
 #include "core/job/job_buffer_ring_mpsc.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "job_test_utils.hh"
+#include "test_global.hh"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <functional>
+#include <future>
 #include <gtest/gtest.h>
 #include <memory>
 #include <mutex>
@@ -34,11 +37,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEJobBufferRingMPSCTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -50,7 +53,7 @@ protected:
     }
 };
 
-using JobBufferRingMPSC = WBE::JobBufferRingMPSC;
+using WBE::JobBufferRingMPSC;
 
 TEST_F(WBEJobBufferRingMPSCTest, ConstructorValidSize) {
     // Should succeed with size >= 2
@@ -80,7 +83,7 @@ TEST_F(WBEJobBufferRingMPSCTest, AddAndRetrieveSingleJob) {
     JobBufferRingMPSC buffer(get_allocator(), 5);
 
     bool performed = false;
-    auto job = std::function<void()>([&performed]() {
+    auto job = std::function<void()>([&performed] {
         performed = true;
     });
 
@@ -101,13 +104,31 @@ TEST_F(WBEJobBufferRingMPSCTest, AddAndRetrieveSingleJob) {
     EXPECT_EQ(empty, nullptr);
 }
 
+TEST_F(WBEJobBufferRingMPSCTest, HandleTracksBufferedJobCompletion) {
+    JobBufferRingMPSC buffer(get_allocator(), 5);
+
+    bool performed = false;
+    std::future<void> handle = buffer.add_job([&performed] {
+        performed = true;
+    });
+
+    EXPECT_FALSE(is_future_ready(handle));
+
+    std::function<void()> retrieved = buffer.retrieve_job();
+    ASSERT_NE(retrieved, nullptr);
+    retrieved();
+
+    EXPECT_TRUE(performed);
+    EXPECT_TRUE(is_future_ready(handle));
+}
+
 TEST_F(WBEJobBufferRingMPSCTest, AddAndRetrieveMultipleJobs) {
     JobBufferRingMPSC buffer(get_allocator(), 5);
 
     // Add multiple jobs
     std::vector<bool> performed(3, false);
     for (int i = 0; i < 3; ++i) {
-        auto job = std::function<void()>([&performed, i]() {
+        auto job = std::function<void()>([&performed, i] {
             performed[i] = true;
         });
         buffer.add_job(job);
@@ -128,31 +149,43 @@ TEST_F(WBEJobBufferRingMPSCTest, AddAndRetrieveMultipleJobs) {
     EXPECT_EQ(empty, nullptr);
 }
 
-TEST_F(WBEJobBufferRingMPSCTest, BufferOverflow) {
-    JobBufferRingMPSC buffer(get_allocator(), 3); // Small buffer
-
-    auto job1 = std::function<void()>([]() {
-    });
-    auto job2 = std::function<void()>([]() {
+TEST_F(WBEJobBufferRingMPSCTest, JobSubmissionWaitsWhenFull) {
+    JobBufferRingMPSC buffer(get_allocator(), 2);
+    buffer.add_job([] {
     });
 
-    EXPECT_NO_THROW(buffer.add_job(job1));
-    EXPECT_NO_THROW(buffer.add_job(job2));
-
-    // This should cause overflow
-    auto job3 = std::function<void()>([]() {
+    std::promise<void> submission_started_promise;
+    std::future<void> submission_started_future = submission_started_promise.get_future();
+    std::promise<void> submission_finished_promise;
+    std::future<void> submission_finished_future = submission_finished_promise.get_future();
+    std::jthread producer([&] {
+        submission_started_promise.set_value();
+        buffer.add_job([] {
+        });
+        submission_finished_promise.set_value();
     });
-    EXPECT_THROW(buffer.add_job(job3), std::runtime_error);
+
+    submission_started_future.wait();
+    EXPECT_EQ(submission_finished_future.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
+
+    std::function<void()> first_job = buffer.retrieve_job();
+    ASSERT_NE(first_job, nullptr);
+    first_job();
+
+    EXPECT_EQ(submission_finished_future.wait_for(std::chrono::seconds(1)), std::future_status::ready);
+    std::function<void()> second_job = buffer.retrieve_job();
+    ASSERT_NE(second_job, nullptr);
+    second_job();
 }
 
 TEST_F(WBEJobBufferRingMPSCTest, RingBufferWrapAround) {
     JobBufferRingMPSC buffer(get_allocator(), 4);
 
-    auto job1 = std::function<void()>([]() {
+    auto job1 = std::function<void()>([] {
     });
-    auto job2 = std::function<void()>([]() {
+    auto job2 = std::function<void()>([] {
     });
-    auto job3 = std::function<void()>([]() {
+    auto job3 = std::function<void()>([] {
     });
 
     buffer.add_job(job1);
@@ -162,7 +195,7 @@ TEST_F(WBEJobBufferRingMPSCTest, RingBufferWrapAround) {
     std::function<void()> retrieved = buffer.retrieve_job();
     EXPECT_NE(retrieved, nullptr);
 
-    auto job4 = std::function<void()>([]() {
+    auto job4 = std::function<void()>([] {
     });
     EXPECT_NO_THROW(buffer.add_job(job4));
 
@@ -192,11 +225,11 @@ TEST_F(WBEJobBufferRingMPSCTest, ConcurrentMultiProducerSingleConsumer) {
 
     producers.reserve(NUM_PRODUCERS);
     for (int i = 0; i < NUM_PRODUCERS; ++i) {
-        producers.emplace_back([&, producer_id = i]() {
+        producers.emplace_back([&, producer_id = i] {
             for (int j = 0; j < JOBS_PER_PRODUCER; ++j) {
                 // Unique job ID for each job across all producers
                 int job_id = producer_id * JOBS_PER_PRODUCER + j;
-                auto job = std::function<void()>([job_id, &consumed_job_ids, &perform_count, &consumed_mutex]() {
+                auto job = std::function<void()>([job_id, &consumed_job_ids, &perform_count, &consumed_mutex] {
                     std::scoped_lock lock(consumed_mutex);
                     consumed_job_ids.push_back(job_id);
                     perform_count.fetch_add(1);
@@ -226,12 +259,12 @@ TEST_F(WBEJobBufferRingMPSCTest, ConcurrentMultiProducerSingleConsumer) {
         } else {
             // If all producers are done and buffer is empty, break
             // A simple check, in a real scenario might need a more robust signal
-            if (produced_count.load() == TOTAL_JOBS) {
-                // to avoid busy-waiting
-                if (buffer.retrieve_job() == nullptr) {
-                    break;
-                }
+            if ((produced_count.load() == TOTAL_JOBS) && (buffer.retrieve_job() == nullptr))
+            // to avoid busy-waiting
+            {
+                break;
             }
+
             std::this_thread::yield();
         }
     }
@@ -268,10 +301,10 @@ TEST_F(WBEJobBufferRingMPSCTest, StressTestManyProducers) {
 
     producers.reserve(NUM_PRODUCERS);
     for (int i = 0; i < NUM_PRODUCERS; ++i) {
-        producers.emplace_back([&, producer_id = i]() {
+        producers.emplace_back([&, producer_id = i] {
             for (int j = 0; j < JOBS_PER_PRODUCER; ++j) {
                 int job_id = producer_id * JOBS_PER_PRODUCER + j;
-                auto job = std::function<void()>([job_id, &consumed_job_ids, &perform_count, &consumed_mutex]() {
+                auto job = std::function<void()>([job_id, &consumed_job_ids, &perform_count, &consumed_mutex] {
                     std::scoped_lock lock(consumed_mutex);
                     consumed_job_ids.push_back(job_id);
                     perform_count.fetch_add(1);

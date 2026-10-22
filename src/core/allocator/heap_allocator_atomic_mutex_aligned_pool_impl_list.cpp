@@ -344,7 +344,7 @@ std::string HeapAllocatorAtomicMutexAlignedPoolImplicitList::unguarded_to_string
     ss << "\"chunk_layout\":[";
     char* curr = mem_chunk;
     bool first = true;
-    uint32_t fragments_size = 0;
+    uint64_t fragments_size = 0;
     while (curr < mem_chunk + size) {
         if (!first) {
             ss << ",";

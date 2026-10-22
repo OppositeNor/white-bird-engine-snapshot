@@ -66,20 +66,12 @@ class WBEACPCompiler(abc.ABC):
         source_type = resource.get(SOURCE_RESOURCE_TYPE_KEY)
         if isinstance(source_type, str) and source_type:
             return source_type
-
-        legacy_type = resource.get("type")
-        if isinstance(legacy_type, str) and legacy_type:
-            return legacy_type
         return None
 
     def _get_source_resource_file(self, resource: ManifestResource) -> str | None:
         source_file = resource.get(SOURCE_RESOURCE_FILE_KEY)
         if isinstance(source_file, str) and source_file:
             return source_file
-
-        legacy_file = resource.get("file")
-        if isinstance(legacy_file, str) and legacy_file:
-            return legacy_file
         return None
 
     def _resolve_resource_file_path(self, resource_path: str, manifest_path: Path, res_dir: Path) -> tuple[Path, Path]:

@@ -20,6 +20,7 @@
 #include "heap_allocator_atomic_mutex_aligned_pool_impl_list_test.hh"
 #include "heap_allocator_atomic_shared_mutex_aligned_pool_impl_list_test.hh"
 #include "heap_allocator_atomic_shared_mutex_aligned_pool_test.hh"
+#include "heap_allocator_atomic_size_classified_test.hh"
 #include "heap_allocator_atomic_thread_local_arena_aligned_pool_impl_list_test.hh"
 #include "heap_allocator_fixed_size_pool_test.hh"
 #include "heap_allocator_pool_test.hh"

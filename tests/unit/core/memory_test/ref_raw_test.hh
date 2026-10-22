@@ -59,7 +59,8 @@ TEST(WBERefRawTest, StaticNewRefCreation) {
     TestObject::instance_count = 0;
 
     // Test static new_ref method
-    auto ref = WBE::RefRaw<TestObject>::new_ref(&allocator, 42);
+    using OwningRef = WBE::RefRaw<TestObject, WBE::MockHeapAllocatorAligned, true>;
+    auto ref = OwningRef::new_ref(&allocator, 42);
 
     ASSERT_NE(ref.get(), nullptr);
     ASSERT_EQ(ref->value, 42);
@@ -67,7 +68,7 @@ TEST(WBERefRawTest, StaticNewRefCreation) {
     ASSERT_FALSE(ref == nullptr);
 
     // Manual cleanup
-    WBE::RefRaw<TestObject>::delete_ref(std::move(ref));
+    OwningRef::delete_ref(std::move(ref));
     ASSERT_EQ(TestObject::instance_count, 0);
 }
 
@@ -127,7 +128,7 @@ TEST(WBERefRawTest, MoveConstructor) {
     auto ref1 = WBE::new_ref<TestObject>(&allocator, 88);
     TestObject* original_ptr = ref1.get();
 
-    WBE::RefRaw<TestObject, WBE::MockHeapAllocatorAligned> ref2(std::move(ref1)); // Move constructor
+    decltype(ref1) ref2(std::move(ref1)); // Move constructor
 
     ASSERT_EQ(ref1.get(), nullptr);      // ref1 is now empty
     ASSERT_EQ(ref2.get(), original_ptr); // ref2 owns the object
@@ -163,7 +164,7 @@ TEST(WBERefRawTest, MoveAssignment) {
 
     auto ref1 = WBE::new_ref<TestObject>(&allocator, 66);
     TestObject* original_ptr = ref1.get();
-    WBE::RefRaw<TestObject, WBE::MockHeapAllocatorAligned> ref2;
+    decltype(ref1) ref2;
 
     ref2 = std::move(ref1); // Move assignment
 

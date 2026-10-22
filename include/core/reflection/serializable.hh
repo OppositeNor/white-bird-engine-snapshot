@@ -15,13 +15,14 @@
 #ifndef WBE_FILE_SERIALIZABLE_HH
 #define WBE_FILE_SERIALIZABLE_HH
 
-#include "core/parser/parser_json.hh"
+#include "core/data/data_value.hh"
 #include "core/reflection/reflection_defs.hh"
+#include "core/reflection/serializable_sd.hh"
 
 #define WBE_DECL_SERIALIZABLE(class_name)                                                                                   \
     friend class ::WhiteBirdEngine::SerializableSD<class_name>;                                                             \
-    virtual void serialize(::WhiteBirdEngine::JSONData& p_data) const override;                                             \
-    virtual void deserialize(const ::WhiteBirdEngine::JSONData& p_data) override;
+    virtual void serialize(::WhiteBirdEngine::DataValue& p_data) const override;                                            \
+    virtual void deserialize(const ::WhiteBirdEngine::DataValue& p_data) override;
 
 namespace WhiteBirdEngine {
 
@@ -44,14 +45,14 @@ public:
      *
      * @param p_data The data to store serialization.
      */
-    virtual void serialize(JSONData& p_data) const = 0;
+    virtual void serialize(DataValue& p_data) const = 0;
 
     /**
      * @brief Deserialize.
      *
      * @param p_data The data to find data from.
      */
-    virtual void deserialize(const JSONData& p_data) = 0;
+    virtual void deserialize(const DataValue& p_data) = 0;
 };
 
 } // namespace WhiteBirdEngine

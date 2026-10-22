@@ -15,7 +15,7 @@
 #ifndef WBE_FILE_CORE_UTILS_HH
 #define WBE_FILE_CORE_UTILS_HH
 
-#include "core/allocator/heap_allocator_atomic_arena_aligned_pool_impl_list.hh"
+#include "core/allocator/heap_allocator_atomic_size_classified.hh"
 #include "core/allocator/i_allocator.hh"
 #include "core/memory/reference_strong.hh"
 #include "core/memory/reference_weak.hh"
@@ -63,6 +63,23 @@ public:
     }
 
 protected:
+    /**
+     * @brief Return the strong reference owning this instance.
+     *
+     * The result grants the same access as the Ref its owners already hold, so it is available from const members, for
+     * example to share the instance with another owner.
+     *
+     * @return The reference set by make_ref().
+     * @throws std::runtime_error If the instance was not created with make_ref() or is being destroyed.
+     */
+    Ref<T> acquire_this_ref() const {
+        Ref<T> result = const_cast<RefWeak<T>&>(this_ref).lock();
+        if (result == MEM_NULL) {
+            throw std::runtime_error("Instance is not owned by a Ref.");
+        }
+        return result;
+    }
+
     RefWeak<T> this_ref;
 };
 
@@ -156,7 +173,7 @@ RefWeak<T> requires_valid(std::string_view p_name, RefWeak<T> p_ref) {
     return p_ref;
 }
 
-using HeapAllocatorDefault = HeapAllocatorAtomicArenaAlignedPoolImplicitList;
+using HeapAllocatorDefault = HeapAllocatorAtomicSizeClassified;
 
 } // namespace WhiteBirdEngine
 

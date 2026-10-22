@@ -17,12 +17,21 @@
 
 #include "core/core_utils.hh"
 #include "core/job/job_buffer_ring_spsc.hh"
+#include "core/memory/reference_strong.hh"
+#include "function/render/i_renderer.hh"
+#include "function/render/render_defs.hh"
+#include "function/render_dummy/renderer_dummy.hh"
+#include "function/render_software/renderer_software.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "job_test_utils.hh"
+#include "test_global.hh"
+#include "utils/defs.hh"
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <gtest/gtest.h>
+#include <latch>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -32,11 +41,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEJobBufferRingSPSCTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -48,7 +57,7 @@ protected:
     }
 };
 
-using JobBufferRingSPSC = WBE::JobBufferRingSPSC;
+using WBE::JobBufferRingSPSC;
 
 TEST_F(WBEJobBufferRingSPSCTest, ConstructorValidSize) {
     // Should succeed with size >= 2
@@ -78,7 +87,7 @@ TEST_F(WBEJobBufferRingSPSCTest, AddAndRetrieveSingleJob) {
     JobBufferRingSPSC buffer(get_allocator(), 5);
 
     bool performed = false;
-    auto job = std::function<void()>([&performed]() {
+    auto job = std::function<void()>([&performed] {
         performed = true;
     });
 
@@ -99,13 +108,66 @@ TEST_F(WBEJobBufferRingSPSCTest, AddAndRetrieveSingleJob) {
     EXPECT_EQ(empty, nullptr);
 }
 
+TEST_F(WBEJobBufferRingSPSCTest, HandleTracksBufferedJobCompletion) {
+    JobBufferRingSPSC buffer(get_allocator(), 5);
+
+    bool performed = false;
+    std::future<void> handle = buffer.add_job([&performed] {
+        performed = true;
+    });
+
+    EXPECT_FALSE(is_future_ready(handle));
+
+    std::function<void()> retrieved = buffer.retrieve_job();
+    ASSERT_NE(retrieved, nullptr);
+    retrieved();
+
+    EXPECT_TRUE(performed);
+    EXPECT_TRUE(is_future_ready(handle));
+}
+
+TEST_F(WBEJobBufferRingSPSCTest, HandleWaitBlocksUntilBufferedJobExecutes) {
+    JobBufferRingSPSC buffer(get_allocator(), 5);
+
+    std::atomic<bool> performed{false};
+    std::latch wait_started(1);
+    std::latch allow_execution(1);
+    std::latch wait_finished(1);
+
+    std::future<void> handle = buffer.add_job([&performed] {
+        performed.store(true, std::memory_order_release);
+    });
+
+    std::jthread wait_thread([&] {
+        wait_started.count_down();
+        handle.wait();
+        wait_finished.count_down();
+    });
+
+    wait_started.wait();
+    EXPECT_FALSE(wait_finished.try_wait());
+
+    std::jthread execute_thread([&] {
+        allow_execution.wait();
+        std::function<void()> retrieved = buffer.retrieve_job(true);
+        ASSERT_NE(retrieved, nullptr);
+        retrieved();
+    });
+
+    allow_execution.count_down();
+    wait_finished.wait();
+
+    EXPECT_TRUE(performed.load(std::memory_order_acquire));
+    EXPECT_TRUE(is_future_ready(handle));
+}
+
 TEST_F(WBEJobBufferRingSPSCTest, AddAndRetrieveMultipleJobs) {
     JobBufferRingSPSC buffer(get_allocator(), 5);
 
     // Add multiple jobs
     std::vector<bool> performed(3, false);
     for (int i = 0; i < 3; ++i) {
-        auto job = std::function<void()>([&performed, i]() {
+        auto job = std::function<void()>([&performed, i] {
             performed[i] = true;
         });
         buffer.add_job(job);
@@ -130,16 +192,16 @@ TEST_F(WBEJobBufferRingSPSCTest, BufferOverflow) {
     JobBufferRingSPSC buffer(get_allocator(), 3); // Small buffer
 
     // Add jobs until buffer is full (size - 1 due to ring buffer implementation)
-    auto job1 = std::function<void()>([]() {
+    auto job1 = std::function<void()>([] {
     });
-    auto job2 = std::function<void()>([]() {
+    auto job2 = std::function<void()>([] {
     });
 
     EXPECT_NO_THROW(buffer.add_job(job1));
     EXPECT_NO_THROW(buffer.add_job(job2));
 
     // This should cause overflow
-    auto job3 = std::function<void()>([]() {
+    auto job3 = std::function<void()>([] {
     });
     EXPECT_THROW(buffer.add_job(job3), std::runtime_error);
 }
@@ -148,11 +210,11 @@ TEST_F(WBEJobBufferRingSPSCTest, RingBufferWrapAround) {
     JobBufferRingSPSC buffer(get_allocator(), 4);
 
     // Fill buffer
-    auto job1 = std::function<void()>([]() {
+    auto job1 = std::function<void()>([] {
     });
-    auto job2 = std::function<void()>([]() {
+    auto job2 = std::function<void()>([] {
     });
-    auto job3 = std::function<void()>([]() {
+    auto job3 = std::function<void()>([] {
     });
 
     buffer.add_job(job1);
@@ -164,7 +226,7 @@ TEST_F(WBEJobBufferRingSPSCTest, RingBufferWrapAround) {
     EXPECT_NE(retrieved, nullptr);
 
     // Now we should be able to add another job (wrap around)
-    auto job4 = std::function<void()>([]() {
+    auto job4 = std::function<void()>([] {
     });
     EXPECT_NO_THROW(buffer.add_job(job4));
 
@@ -185,7 +247,7 @@ TEST_F(WBEJobBufferRingSPSCTest, FIFOOrdering) {
     // Add jobs
     std::vector<bool> performed(5, false);
     for (int i = 0; i < 5; ++i) {
-        auto job = std::function<void()>([&performed, i]() {
+        auto job = std::function<void()>([&performed, i] {
             performed[i] = true;
         });
         buffer.add_job(job);
@@ -207,7 +269,7 @@ TEST_F(WBEJobBufferRingSPSCTest, MixedAddRetrieveOperations) {
 
     // Add a job
     bool performed1 = false;
-    auto job1 = std::function<void()>([&performed1]() {
+    auto job1 = std::function<void()>([&performed1] {
         performed1 = true;
     });
     buffer.add_job(job1);
@@ -220,10 +282,10 @@ TEST_F(WBEJobBufferRingSPSCTest, MixedAddRetrieveOperations) {
 
     // Add more jobs
     bool performed2 = false, performed3 = false, performed4 = false;
-    auto job2 = std::function<void()>([&performed2]() {
+    auto job2 = std::function<void()>([&performed2] {
         performed2 = true;
     });
-    auto job3 = std::function<void()>([&performed3]() {
+    auto job3 = std::function<void()>([&performed3] {
         performed3 = true;
     });
     buffer.add_job(job2);
@@ -236,7 +298,7 @@ TEST_F(WBEJobBufferRingSPSCTest, MixedAddRetrieveOperations) {
     EXPECT_TRUE(performed2);
 
     // Add another
-    auto job4 = std::function<void()>([&performed4]() {
+    auto job4 = std::function<void()>([&performed4] {
         performed4 = true;
     });
     buffer.add_job(job4);
@@ -260,7 +322,7 @@ TEST_F(WBEJobBufferRingSPSCTest, JobExecution) {
     JobBufferRingSPSC buffer(get_allocator(), 5);
 
     bool performed = false;
-    auto job = std::function<void()>([&performed]() {
+    auto job = std::function<void()>([&performed] {
         performed = true;
     });
     buffer.add_job(job);
@@ -287,9 +349,9 @@ TEST_F(WBEJobBufferRingSPSCTest, ConcurrentProducerConsumer) {
     std::atomic<bool> producer_done{false};
 
     // Producer thread
-    std::thread producer([&]() {
+    std::thread producer([&] {
         for (int i = 0; i < NUM_JOBS; ++i) {
-            auto job = std::function<void()>([&perform_count]() {
+            auto job = std::function<void()>([&perform_count] {
                 perform_count.fetch_add(1);
             });
 
@@ -309,7 +371,7 @@ TEST_F(WBEJobBufferRingSPSCTest, ConcurrentProducerConsumer) {
     });
 
     // Consumer thread
-    std::thread consumer([&]() {
+    std::thread consumer([&] {
         while (!producer_done || consumed.load() < produced.load()) {
             std::function<void()> job = buffer.retrieve_job();
             if (job != nullptr) {
@@ -340,9 +402,9 @@ TEST_F(WBEJobBufferRingSPSCTest, ProducerConsumerWithSmallBuffer) {
     std::atomic<bool> producer_done{false};
 
     // Producer thread
-    std::thread producer([&]() {
+    std::thread producer([&] {
         for (int i = 0; i < NUM_JOBS; ++i) {
-            auto job = std::function<void()>([&perform_count]() {
+            auto job = std::function<void()>([&perform_count] {
                 perform_count.fetch_add(1);
             });
 
@@ -360,7 +422,7 @@ TEST_F(WBEJobBufferRingSPSCTest, ProducerConsumerWithSmallBuffer) {
     });
 
     // Consumer thread
-    std::thread consumer([&]() {
+    std::thread consumer([&] {
         while (!producer_done || consumed.load() < NUM_JOBS) {
             std::function<void()> job = buffer.retrieve_job();
             if (job != nullptr) {
@@ -390,9 +452,9 @@ TEST_F(WBEJobBufferRingSPSCTest, StressTestManyOperations) {
     std::atomic<bool> producer_done{false};
 
     // Producer thread
-    std::thread producer([&]() {
+    std::thread producer([&] {
         for (int i = 0; i < NUM_JOBS; ++i) {
-            auto job = std::function<void()>([&perform_count]() {
+            auto job = std::function<void()>([&perform_count] {
                 perform_count.fetch_add(1);
             });
 
@@ -409,7 +471,7 @@ TEST_F(WBEJobBufferRingSPSCTest, StressTestManyOperations) {
     });
 
     // Consumer thread
-    std::thread consumer([&]() {
+    std::thread consumer([&] {
         while (!producer_done || consumed.load() < NUM_JOBS) {
             std::function<void()> job = buffer.retrieve_job();
             if (job != nullptr) {
@@ -425,6 +487,26 @@ TEST_F(WBEJobBufferRingSPSCTest, StressTestManyOperations) {
     // Verify all jobs were consumed
     EXPECT_EQ(perform_count.load(), NUM_JOBS);
     EXPECT_EQ(consumed.load(), NUM_JOBS);
+}
+
+TEST_F(WBEJobBufferRingSPSCTest, NoOpHandlersReturnReadyHandles) {
+    {
+        WBE::RendererCapabilities capabilities{.ray_tracing = true};
+        WBE::RenderAllocator render_allocator(WBE_MI_B(1));
+        WBE::RendererDummy dummy_renderer(&render_allocator, capabilities);
+
+        std::future<void> dummy_handle = dummy_renderer.add_job([] {
+        });
+        EXPECT_TRUE(is_future_ready(dummy_handle));
+    }
+
+    WBE::RendererCapabilities software_capabilities{.ray_tracing = true};
+    auto software_allocator = WBE::make_ref<WBE::RenderAllocator>(get_allocator(), WBE_MI_B(1));
+    WBE::RendererSoftware software_renderer(software_allocator, software_capabilities);
+
+    std::future<void> software_handle = software_renderer.add_job([] {
+    });
+    EXPECT_TRUE(is_future_ready(software_handle));
 }
 
 #endif

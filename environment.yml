@@ -1,0 +1,25 @@
+name: white-bird-engine
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.14
+  # The system toolchain's native ACP modules require GLIBCXX_3.4.35.
+  - libstdcxx-ng>=16
+  - libgcc>=16
+  - python-clang
+  - gitpython
+  - jinja2
+  - pydantic>=2
+  - matplotlib
+  - cffi
+  - numpy
+  - pillow
+  - pybind11>=2.12
+  - pytest>=8
+  - setuptools>=68
+  # Embeds Lua for the ACP, which runs the Teal compiler from dependencies/tl.
+  - lupa
+  # Requirements of slangpy, which build.py builds from dependencies/slangpy for the shader tests.
+  - typing_extensions
+  - libcst

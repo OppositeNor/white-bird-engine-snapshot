@@ -1,0 +1,115 @@
+# Copyright 2025 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# Scripts. A script's resource id is its module name: its path under assets/scripts/teal, without the extension and
+# with dots for slashes, so that `require("render_graph_utils.render_graph_utils")` finds both the resource and, in the editor, the file.
+include = []
+
+[[resources]]
+id = "utils.math"
+source_type = "script"
+source_file = "assets/scripts/teal/utils/math.tl"
+
+[[resources]]
+id = "render_graph_utils.render_graph_utils"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/render_graph_utils.tl"
+
+# Shared declarations generated from the graph API and reflected render-task parameters.
+[[resources]]
+id = "render_graph_utils.render_graph"
+source_type = "script"
+source_file = "render_graph_utils/render_graph.tl"
+path = "assets/scripts/teal/render_graph_utils/render_graph.lua"
+
+# Reflection generates this module into build/<target>/teal (templates/teal_render_graph_tasks.tl.jinja), so its source
+# file is relative to that directory.
+[[resources]]
+id = "render_graph_utils.render_graph_tasks"
+source_type = "script"
+source_file = "render_graph_utils/render_graph_tasks.tl"
+path = "assets/scripts/teal/render_graph_utils/render_graph_tasks.lua"
+
+[[resources]]
+id = "render_graph_utils.sort"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/sort.tl"
+
+[[resources]]
+id = "render_graph_utils.large_prefix_scan"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/large_prefix_scan.tl"
+
+[[resources]]
+id = "render_graph_utils.dedup_large"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/dedup_large.tl"
+
+[[resources]]
+id = "render_graph_utils.svo_3"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/svo_3.tl"
+
+[[resources]]
+id = "render_graphs.draw_cube_unshaded"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graphs/draw_cube_unshaded.tl"
+
+[[resources]]
+id = "render_graphs.pixel_sorting"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graphs/pixel_sorting.tl"
+
+[[resources]]
+id = "render_graphs.deferred"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graphs/deferred.tl"
+
+[[resources]]
+id = "render_graph_utils.features.pixel_sort"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/features/pixel_sort.tl"
+
+[[resources]]
+id = "render_graph_utils.features.voxel_svo"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/features/voxel_svo.tl"
+
+[[resources]]
+id = "render_graph_utils.features.voxel_octree"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graph_utils/features/voxel_octree.tl"
+
+[[resources]]
+id = "tests.teal_math"
+source_type = "script"
+source_file = "assets/scripts/teal/tests/teal_math.tl"
+scope = "test_only"
+
+[[resources]]
+id = "tests.teal_recipe"
+source_type = "script"
+source_file = "assets/scripts/teal/tests/teal_recipe.tl"
+scope = "test_only"
+
+[[resources]]
+id = "tests.teal_graph_api"
+source_type = "script"
+source_file = "assets/scripts/teal/tests/teal_graph_api.tl"
+scope = "test_only"
+
+[[resources]]
+id = "tests.teal_svo_3"
+source_type = "script"
+source_file = "assets/scripts/teal/tests/teal_svo_3.tl"
+scope = "test_only"

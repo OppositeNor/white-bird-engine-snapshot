@@ -13,6 +13,13 @@
    limitations under the License.
 */
 
+#include "platform/os/os.hh"
+#include <unistd.h>
+
 namespace WhiteBirdEngine {
-// TODO
+
+PIDType OS::get_pid() {
+    return getpid();
 }
+
+} // namespace WhiteBirdEngine

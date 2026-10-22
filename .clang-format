@@ -1,0 +1,50 @@
+---
+BasedOnStyle: LLVM
+
+# Global indentation constraints.
+UseTab: Never
+TabWidth: 4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+
+# Class/struct indentation constraints.
+AccessModifierOffset: -4
+
+# Function implementation/signature and call continuation constraints.
+AlignAfterOpenBracket: DontAlign
+IndentWrappedFunctionNames: false
+BinPackParameters: false
+BinPackArguments: false
+ConstructorInitializerIndentWidth: 4
+LambdaBodyIndentation: Signature
+
+# Keep preprocessor directives at top-level indentation.
+IndentPPDirectives: None
+
+# Namespace scopes should not affect indentation.
+NamespaceIndentation: None
+
+# Pointer/reference qualifiers attach to the type (e.g. `int* a`, `int& a`).
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Maximum line width.
+ColumnLimit: 125
+
+# Disallow single-line functions/lambdas/blocks; always break after `{`.
+AllowShortFunctionsOnASingleLine: None
+AllowShortLambdasOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+
+# Always break between a template declaration and the function/class it introduces.
+AlwaysBreakTemplateDeclarations: Yes
+
+# Never split string literals (e.g. error messages) across lines, even if they exceed ColumnLimit.
+BreakStringLiterals: false
+PenaltyBreakString: 1000000
+PenaltyExcessCharacter: 1

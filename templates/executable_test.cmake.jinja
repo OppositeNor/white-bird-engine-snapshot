@@ -17,14 +17,23 @@
 set(TEST_NAME {{ name }})
 
 {% for exe in exes %}
+set(TEST_SOURCES_{{ exe.name }})
+{% for source in exe.sources %}
+{% if source.endswith("/*") %}
+file(GLOB TEST_SOURCES_{{ exe.name }}_DIRECTORY CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/{{ source }}")
+list(APPEND TEST_SOURCES_{{ exe.name }} ${TEST_SOURCES_{{ exe.name }}_DIRECTORY})
+{% else %}
+list(APPEND TEST_SOURCES_{{ exe.name }} {{ source }})
+{% endif %}
+{% endfor %}
+
 add_executable(${TEST_NAME}_{{ exe.name }}
-    {% for source in exe.sources %}
-    {{ source }}
-    {% endfor %}
+    ${TEST_SOURCES_{{ exe.name }}}
 )
 
 target_link_libraries(${TEST_NAME}_{{ exe.name }}
     ${libs}
+    wbe_executable_test_utilities
     gtest_main
 )
 if (WBE_USE_RPATH_LIBRARY)
@@ -36,4 +45,3 @@ if (WBE_USE_RPATH_LIBRARY)
 endif()
 
 {% endfor %}
-

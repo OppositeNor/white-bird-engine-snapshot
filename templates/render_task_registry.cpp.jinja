@@ -1,0 +1,178 @@
+{# Copyright 2025 OppositeNor
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+#}
+// {{ _prefix }}
+{% set registry = namespace(names=[], entries=[]) %}
+{% for task in metadata.classes %}
+{% if task.attribute | select("in", render_tasks) | list | length > 0 %}
+{% set registry.entries = registry.entries + [task] %}
+{% endif %}
+{% endfor %}
+#include "function/render_vk/render_task_registry_vk.hh"
+{% for task in registry.entries %}
+#include "{{ task.in_header }}"
+{% endfor %}
+#include "core/memory/unique.hh"
+#include "core/data/data_value.hh"
+#include "function/render_vk/i_render_task_vk.hh"
+#include "function/render_vk/render_graph_context_vk.hh"
+#include "function/render_vk/render_graph_descriptor_vk.hh"
+#include "function/render_vk/render_context_vk.hh"
+#include "generated/serializables_sd.gen.hh"
+#include <algorithm>
+#include <array>
+#include <format>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+
+{% for task in registry.entries %}
+{% set create = namespace(found=false) %}
+{% for method in task.methods %}
+{% if method.method_name == "create" and method.is_static %}
+{% set create.found = true %}
+{% endif %}
+{% endfor %}
+{% if not create.found %}
+#error "{{ task.name }} is a WBE_RENDER_TASK but declares no static create() annotated with WBE_META(WBE_REFLECT)."
+{% endif %}
+{% for name in [task.name] + task.aliases %}
+{% if name in registry.names %}
+#error "Render task type name '{{ name }}' is registered by more than one WBE_RENDER_TASK."
+{% endif %}
+{% set registry.names = registry.names + [name] %}
+{% endfor %}
+{% endfor %}
+namespace WhiteBirdEngine {
+
+namespace {
+
+// Extracts the parameter type of a render task's create() and rejects any other signature.
+template <typename TCreate>
+struct RenderTaskCreateTraits {
+    static constexpr bool IS_VALID = false;
+};
+
+template <typename TParams>
+struct RenderTaskCreateTraits<Unique<IRenderTaskVK> (*)(const RenderContextVK*, const TParams&, const RendGraphContextVK&)> {
+    static constexpr bool IS_VALID = true;
+    using Params = TParams;
+};
+
+template <typename TTask>
+RendTaskFactoryVK make_render_task_factory(const DataValue& p_params, const RenderContextVK* p_render_data) {
+    using Traits = RenderTaskCreateTraits<decltype(&TTask::create)>;
+    static_assert(Traits::IS_VALID,
+        "A WBE_RENDER_TASK must declare static Unique<IRenderTaskVK> create(const RenderContextVK*, const TParams&, const RendGraphContextVK&).");
+    typename Traits::Params params{};
+    SerializableSD<typename Traits::Params>::deserialize(p_params, params);
+    return [p_render_data, params = std::move(params)](const RendGraphContextVK& p_context) {
+        return TTask::create(p_render_data, params, p_context);
+    };
+}
+
+template <typename TTask>
+RendTaskDescVK& add_render_task(RendGraphDescVK& p_graph, std::string_view p_task_id, const DataValue& p_params, const RenderContextVK* p_render_data) {
+    using Traits = RenderTaskCreateTraits<decltype(&TTask::create)>;
+    typename Traits::Params params{};
+    SerializableSD<typename Traits::Params>::deserialize(p_params, params);
+    RendTaskDescVK task(p_graph.allocator, p_task_id, [p_render_data, params](const RendGraphContextVK& p_context) {
+        return TTask::create(p_render_data, params, p_context);
+    });
+    if constexpr (requires { TTask::prepare_graph(p_graph, task, params, p_render_data); }) {
+        TTask::prepare_graph(p_graph, task, params, p_render_data);
+    }
+    p_graph.add_task(std::move(task));
+    return p_graph.get_task(p_task_id);
+}
+
+struct RenderTaskTypeEntry {
+    std::string_view name;
+    RendTaskFactoryVK (*make_factory)(const DataValue&, const RenderContextVK*);
+    RendTaskDescVK& (*add_task)(RendGraphDescVK&, std::string_view, const DataValue&, const RenderContextVK*);
+};
+
+// The dispatch table, in the same order as RENDER_TASK_TYPE_NAMES.
+constexpr std::array<RenderTaskTypeEntry, {{ registry.names | length }}> RENDER_TASK_TYPES = { {
+{% for task in registry.entries %}
+{% for name in [task.name] + task.aliases %}
+    {.name = "{{ name }}",
+        .make_factory = &make_render_task_factory<{{ task.name }}>,
+        .add_task = &add_render_task<{{ task.name }}>},
+{% endfor %}
+{% endfor %}
+} };
+
+constexpr std::array<std::string_view, {{ registry.names | length }}> RENDER_TASK_TYPE_NAMES = { {
+{% for name in registry.names %}
+    "{{ name }}",
+{% endfor %}
+} };
+
+const RenderTaskTypeEntry* find_render_task_type(std::string_view p_task_type) {
+    for (const RenderTaskTypeEntry& entry : RENDER_TASK_TYPES) {
+        if (entry.name == p_task_type) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+RendTaskFactoryVK RenderTaskRegistryVK::create_factory(std::string_view p_task_type, const DataValue& p_params, const RenderContextVK* p_render_data) {
+    const RenderTaskTypeEntry* entry = find_render_task_type(p_task_type);
+    if (entry == nullptr) {
+        throw std::runtime_error(std::format("Failed to create render task factory: unknown render task type '{}'.", p_task_type));
+    }
+    if (p_render_data == nullptr) {
+        throw std::runtime_error(std::format("Failed to create render task factory for '{}': render data is null.", p_task_type));
+    }
+    return entry->make_factory(p_params, p_render_data);
+}
+
+RendTaskDescVK& RenderTaskRegistryVK::add_task(RendGraphDescVK& p_graph,
+    std::string_view p_task_id,
+    std::string_view p_task_type,
+    const DataValue& p_params,
+    const RenderContextVK* p_render_data) {
+    const RenderTaskTypeEntry* entry = find_render_task_type(p_task_type);
+    if (entry == nullptr) {
+        throw std::runtime_error(std::format("Failed to add render task '{}': unknown render task type '{}'.", p_task_id, p_task_type));
+    }
+    if (p_render_data == nullptr) {
+        throw std::runtime_error(std::format("Failed to add render task '{}' of type '{}': render data is null.", p_task_id, p_task_type));
+    }
+    if (p_task_id.empty()) {
+        throw std::runtime_error(std::format("Failed to add render task of type '{}': the task id is empty.", p_task_type));
+    }
+    if (std::ranges::any_of(p_graph.tasks, [p_task_id](const RendTaskDescVK& p_task) {
+            return p_task.task_id == p_task_id;
+        })) {
+        throw std::runtime_error(std::format("Failed to add render task '{}': the graph already has a task with this id.", p_task_id));
+    }
+    return entry->add_task(p_graph, p_task_id, p_params, p_render_data);
+}
+
+bool RenderTaskRegistryVK::contains(std::string_view p_task_type) {
+    return std::ranges::find(RENDER_TASK_TYPE_NAMES, p_task_type) != RENDER_TASK_TYPE_NAMES.end();
+}
+
+std::span<const std::string_view> RenderTaskRegistryVK::get_task_types() {
+    return RENDER_TASK_TYPE_NAMES;
+}
+
+} // namespace WhiteBirdEngine

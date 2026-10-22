@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+add_subdirectory(executable)
 
 file(GLOB_RECURSE WBE_UNIT_TEST_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
 
@@ -22,6 +23,12 @@ target_link_libraries(wbe_unit_test PRIVATE
     WBE_ENGINE
     gtest_main
 )
+
+# Shared unit test support headers, such as test_global.hh.
+target_include_directories(wbe_unit_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+
+# The Teal declarations of the WBE_REFLECT_SCRIPT types (templates/teal_types.d.tl.jinja).
+target_compile_definitions(wbe_unit_test PRIVATE WBE_TEAL_DECLARATIONS_DIR="${CMAKE_BINARY_DIR}/teal")
 
 file(GLOB_RECURSE WBE_UNIT_TEST_BENCHMARK ${CMAKE_CURRENT_SOURCE_DIR}/benchmark/*.cpp)
 

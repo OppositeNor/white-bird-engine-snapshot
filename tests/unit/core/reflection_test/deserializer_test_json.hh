@@ -19,8 +19,8 @@
 #include "core/reflection/serializable.hh"
 #include "generated/serializables_sd.gen.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
 #include "reflection_test_data.hh"
+#include "test_global.hh"
 #include "utils/utils.hh"
 #include <cstdint>
 #include <cstring>
@@ -37,11 +37,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEDeserializerJSONTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -207,6 +207,23 @@ TEST_F(WBEDeserializerJSONTest, OptionalFieldPresentAndMissing) {
     EXPECT_FALSE(test_obj.optional_str_test.has_value());
 }
 
+TEST_F(WBEDeserializerJSONTest, SupportsAliasedFieldNames) {
+    WBE::TestSerializableAliases test_obj;
+    WBE::ParserJSON parser;
+
+    parser.parse_from_buffer(R"({ "canonical_name": "primary", "legacy_name": "alias", "required_value": 17, "required_alias": 29 })");
+    WhiteBirdEngine::SerializableSD<WhiteBirdEngine::TestSerializableAliases>::deserialize(parser.get_data(), test_obj);
+
+    EXPECT_EQ(test_obj.canonical_name, "primary");
+    EXPECT_EQ(test_obj.required_value, 17);
+
+    parser.parse_from_buffer(R"({ "display_name": "alias-only", "required_alias": 31 })");
+    WhiteBirdEngine::SerializableSD<WhiteBirdEngine::TestSerializableAliases>::deserialize(parser.get_data(), test_obj);
+
+    EXPECT_EQ(test_obj.canonical_name, "alias-only");
+    EXPECT_EQ(test_obj.required_value, 31);
+}
+
 TEST_F(WBEDeserializerJSONTest, NestingGeneral) {
     WBE::SerializableSD<WBE::TestSerializableNesting> sd;
     WBE::TestSerializableNesting test_obj;
@@ -340,7 +357,7 @@ TEST_F(WBEDeserializerJSONTest, EdgeCase_ExtremeValues) {
         "si32_test": 2147483647,
         "si64_test": -9223372036854775808,
         "ui32_test": 4294967295,
-        "ui64_test": 18446744073709551615,
+        "ui64_test": 9223372036854775807,
         "f32_test": 3.4028235e+38,
         "f64_test": -1.7976931348623157e+308
     })";
@@ -351,7 +368,7 @@ TEST_F(WBEDeserializerJSONTest, EdgeCase_ExtremeValues) {
     EXPECT_EQ(test_obj.si32_test, std::numeric_limits<int32_t>::max());
     EXPECT_EQ(test_obj.si64_test, std::numeric_limits<int64_t>::min());
     EXPECT_EQ(test_obj.ui32_test, std::numeric_limits<uint32_t>::max());
-    EXPECT_EQ(test_obj.ui64_test, std::numeric_limits<uint64_t>::max());
+    EXPECT_EQ(test_obj.ui64_test, static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 }
 
 TEST_F(WBEDeserializerJSONTest, EdgeCase_UnicodeStrings) {
@@ -470,7 +487,7 @@ TEST_F(WBEDeserializerJSONTest, VectorContainer_LargeVector) {
     for (int i = 0; i < 1000; ++i) {
         large_vector_json += std::to_string(i);
         if (i < 999) {
-            large_vector_json += ",";
+            large_vector_json += ',';
         }
     }
     large_vector_json += "]}";
@@ -907,7 +924,7 @@ TEST_F(WBEDeserializerJSONTest, DynamicDeserialization_ExtremeValues) {
         "si32_test": 2147483647,
         "si64_test": -9223372036854775808,
         "ui32_test": 4294967295,
-        "ui64_test": 18446744073709551615,
+        "ui64_test": 9223372036854775807,
         "f32_test": 3.4028235e+38,
         "f64_test": -1.7976931348623157e+308
     })";
@@ -918,7 +935,7 @@ TEST_F(WBEDeserializerJSONTest, DynamicDeserialization_ExtremeValues) {
     EXPECT_EQ(test_obj.si32_test, std::numeric_limits<int32_t>::max());
     EXPECT_EQ(test_obj.si64_test, std::numeric_limits<int64_t>::min());
     EXPECT_EQ(test_obj.ui32_test, std::numeric_limits<uint32_t>::max());
-    EXPECT_EQ(test_obj.ui64_test, std::numeric_limits<uint64_t>::max());
+    EXPECT_EQ(test_obj.ui64_test, static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
 }
 
 TEST_F(WBEDeserializerJSONTest, DynamicDeserialization_UnicodeStrings) {
@@ -1192,16 +1209,20 @@ TEST_F(WBEDeserializerJSONTest, DynamicDispatch_RuntimeTypeResolution) {
         std::function<void(WBE::Serializable*)> validator;
     };
 
-    std::vector<TestCase> test_cases = {{.type_name = "TestSerializable",
-                                            .json_data = R"({"si32_test": 123, "str_test": "runtime_test"})",
-                                            .validator =
-                                                [](WBE::Serializable* p_obj) {
-                                                    auto* ptr = dynamic_cast<WBE::TestSerializable*>(p_obj);
-                                                    ASSERT_NE(ptr, nullptr);
-                                                    EXPECT_EQ(ptr->si32_test, 123);
-                                                    EXPECT_EQ(ptr->str_test, "runtime_test");
-                                                }},
-        {.type_name = "TestInheritedChild",
+    std::vector<TestCase> test_cases = {
+        {
+            .type_name = "TestSerializable",
+            .json_data = R"({"si32_test": 123, "str_test": "runtime_test"})",
+            .validator =
+                [](WBE::Serializable* p_obj) {
+                    auto* ptr = dynamic_cast<WBE::TestSerializable*>(p_obj);
+                    ASSERT_NE(ptr, nullptr);
+                    EXPECT_EQ(ptr->si32_test, 123);
+                    EXPECT_EQ(ptr->str_test, "runtime_test");
+                },
+        },
+        {
+            .type_name = "TestInheritedChild",
             .json_data = R"({"base_id": 456, "child_id": 789})",
             .validator =
                 [](WBE::Serializable* p_obj) {
@@ -1209,13 +1230,20 @@ TEST_F(WBEDeserializerJSONTest, DynamicDispatch_RuntimeTypeResolution) {
                     ASSERT_NE(ptr, nullptr);
                     EXPECT_EQ(ptr->base_id, 456);
                     EXPECT_EQ(ptr->child_id, 789);
-                }},
-        {.type_name = "TestVectorContainer", .json_data = R"({"ints": [10, 20, 30]})", .validator = [](WBE::Serializable* p_obj) {
-             auto* ptr = dynamic_cast<WBE::TestVectorContainer*>(p_obj);
-             ASSERT_NE(ptr, nullptr);
-             EXPECT_EQ(ptr->ints.size(), 3);
-             EXPECT_EQ(ptr->ints[1], 20);
-         }}};
+                },
+        },
+        {
+            .type_name = "TestVectorContainer",
+            .json_data = R"({"ints": [10, 20, 30]})",
+            .validator =
+                [](WBE::Serializable* p_obj) {
+                    auto* ptr = dynamic_cast<WBE::TestVectorContainer*>(p_obj);
+                    ASSERT_NE(ptr, nullptr);
+                    EXPECT_EQ(ptr->ints.size(), 3);
+                    EXPECT_EQ(ptr->ints[1], 20);
+                },
+        },
+    };
 
     WBE::ParserJSON parser;
 
@@ -1609,6 +1637,12 @@ TEST_F(WBEDeserializerJSONTest, NestedRequired_ComplexStructure) {
     EXPECT_EQ(test_obj.required_static_vector[1].required_static_field, "static2");
     EXPECT_EQ(test_obj.required_static_vector[1].optional_static_number, 999);
     EXPECT_EQ(test_obj.required_static_vector[1].required_static_vector, glm::vec3(10.0F, 11.0F, 12.0F));
+}
+
+TEST_F(WBEDeserializerJSONTest, RejectsIntegersAboveTheSignedRange) {
+    // DataValue integers are signed 64-bit, so JSON integers above INT64_MAX are rejected when the document is read.
+    WBE::ParserJSON parser;
+    EXPECT_THROW(parser.parse_from_buffer(R"({"ui64_test": 9223372036854775808})"), std::runtime_error);
 }
 
 #endif

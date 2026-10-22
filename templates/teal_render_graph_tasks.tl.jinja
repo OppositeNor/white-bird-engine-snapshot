@@ -1,0 +1,76 @@
+{# Copyright 2026 OppositeNor
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+#}
+-- {{ _prefix }}
+-- Installs the constructors of the render tasks annotated WBE_RENDER_TASK(<method>). Public graph and params types live
+-- in render_graph; this implementation module only describes fields for lowering and installs task constructors.
+{% set api = metadata | teal_render_tasks(render_tasks, reflect_script) %}
+
+local type render_graph = require("render_graph_utils.render_graph")
+
+local record render_graph_tasks
+    -- A params field that holds resource ids: an id ("resource"), or a list, a map, or a record of nested fields that
+    -- hold them. A "graph" id names a graph resource, a "task_local" id names one through the task's aliases, and a
+    -- "database" key identifies an entry of expected_type in the renderer's resource database.
+    enum ResourceFieldKind
+        "resource"
+        "list"
+        "map"
+        "record"
+    end
+
+    enum ResourceScope
+        "graph"
+        "task_local"
+        "database"
+    end
+
+    record ResourceField
+        name: string
+        kind: ResourceFieldKind
+        scope: ResourceScope
+        expected_type: string
+        element: ResourceField
+        fields: {ResourceField}
+    end
+end
+{% macro field_literal(field) -%}
+{ {% if field.name is defined %}name = "{{ field.name }}", {% endif %}kind = "{{ field.kind }}"
+{%- if field.scope is defined %}, scope = "{{ field.scope }}"{% endif %}
+{%- if field.expected_type is defined %}, expected_type = "{{ field.expected_type }}"{% endif %}
+{%- if field.element is defined %}, element = {{ field_literal(field.element) }}{% endif %}
+{%- if field.fields is defined %}, fields = { {% for child in field.fields %}{{ field_literal(child) }}{% if not loop.last %}, {% endif %}{% endfor %} }{% endif %} }
+{%- endmacro %}
+{% for constructor in api.constructors %}
+
+local {{ constructor.method }}_fields: {render_graph_tasks.ResourceField} = {
+{% for field in constructor.fields %}
+    {{ field_literal(field) }},
+{% endfor %}
+}
+{% endfor %}
+
+-- Install the constructors on a graph. Each passes its id, task type, params, options, and resource fields to make_task.
+function render_graph_tasks.install(p_graph: render_graph.Graph,
+    p_make_task: function(p_id: string, p_type: string, p_params: any, p_options: render_graph.TaskOptions,
+        p_fields: {render_graph_tasks.ResourceField}): render_graph.Task)
+{% for constructor in api.constructors %}
+    p_graph.{{ constructor.method }} = function(_self: render_graph.Graph, p_id: string, p_params: any,
+        p_options?: render_graph.TaskOptions): render_graph.Task
+        return p_make_task(p_id, "{{ constructor.type }}", p_params, p_options, {{ constructor.method }}_fields)
+    end
+{% endfor %}
+end
+
+return render_graph_tasks

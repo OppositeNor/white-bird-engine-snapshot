@@ -1,0 +1,145 @@
+{# Copyright 2026 OppositeNor
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+#}
+-- {{ _prefix }}
+-- Shared render graph declarations. The runtime helpers implement these operations in render_graph_utils.render_graph_utils.
+-- Task parameter interfaces and constructors come from reflected render-task classes and their resource annotations.
+{% set api = metadata | teal_render_tasks(render_tasks, reflect_script) %}
+{% set dispatch = namespace(type="wbe.RTParamsComputeDispatchVK") %}
+{% for interface in api.interfaces if interface.name == "RTParamsComputeDispatchVK" %}
+{% set dispatch.type = interface.name %}
+{% endfor %}
+
+local type wbe = require("wbe")
+
+local record render_graph
+    -- A graph-owned description, an external import, a subgraph port, or a database entry. Image views retain their source.
+    record Resource
+        id: string
+        kind: string
+        resource_type: string
+        description: wbe.RendRecipeResourceVK
+        dependencies: {Resource}
+        view: function(self: Resource, p_id?: string, p_view?: wbe.RendImageViewParamsVK): Resource
+    end
+
+    -- A reusable, ordered resource sequence for connections; constructing one does not collect its members.
+    record ResourceBundle
+        resources: {Resource}
+    end
+
+    record TaskOptions
+        aliases: {string:Resource}
+        uses: {Resource}
+        trigger: wbe.RendRecipeTriggerVK
+        toggle: wbe.RendRecipeToggleVK
+    end
+
+    record Edge
+        to: Task
+        resource: Resource
+    end
+
+    -- Resource handles bind task-local names without changing the explicit ordering of connect edges.
+    record Task
+        id: string
+        ["type"]: string
+        import: boolean
+        params: any
+        aliases: {string:Resource}
+        edges: {Edge}
+        graph: Graph
+        alias: function(self: Task, p_local_name: string, p_resource: Resource): Task
+        connect: function(self: Task, p_next_task: Task, p_resource: Resource): Task
+        connect: function(self: Task, p_next_task: Task, p_resources: {Resource}): Task
+        connect: function(self: Task, p_next_task: Task, p_bundle: ResourceBundle): Task
+        connect_all: function(self: Task, p_next_tasks: {Task}, p_resource: Resource): Task
+        connect_all: function(self: Task, p_next_tasks: {Task}, p_resources: {Resource}): Task
+        connect_all: function(self: Task, p_next_tasks: {Task}, p_bundle: ResourceBundle): Task
+        inputs_from: function(self: Task, p_producer: Task, p_bindings: {string:Resource}): Task
+        color_target: function(self: Task, p_index: integer, p_resource: Resource): Task
+        depth_target: function(self: Task, p_resource: Resource): Task
+        trigger: wbe.RendRecipeTriggerVK
+        toggle: wbe.RendRecipeToggleVK
+        subgraph: wbe.RendGraphRecipeVK
+        ports: {string:Resource}
+        -- Collect resources without declaring an access or adding an ordering edge.
+        uses: {Resource}
+    end
+{% for interface in api.interfaces %}
+
+    interface {{ interface.name }}
+{% for field in interface.fields %}
+        {{ field.name }}: {{ field.type }}
+{% endfor %}
+    end
+{% endfor %}
+
+    record Graph
+        tasks: {Task}
+        -- Snapshot a non-empty list of graph resource handles without assigning a graph resource id.
+        resource_bundle: function(self: Graph, p_resources: {Resource}): ResourceBundle
+        add_mesh: function(self: Graph, p_key: string): Resource
+        add_compute_pipeline: function(self: Graph, p_key: string): Resource
+        add_graphics_pipeline: function(self: Graph, p_key: string): Resource
+        add_buffer: function(self: Graph, p_id: string, p_usage: wbe.RendResPrimaryUsageVK, p_size: integer): Resource
+        add_storage_buffer: function(self: Graph, p_id: string, p_size: integer): Resource
+        add_image: function(self: Graph, p_id: string, p_usage: wbe.RendResPrimaryUsageVK,
+            p_format: wbe.ImageFormatVK | integer, p_extent?: wbe.RendExtent2DParamsVK,
+            p_additional_usage?: {wbe.ImageUsageFlagVK | integer}, p_mip_levels?: integer): Resource
+        add_storage_image: function(self: Graph, p_id: string, p_format: wbe.ImageFormatVK | integer,
+            p_width: integer, p_height: integer, p_additional_usage?: {wbe.ImageUsageFlagVK | integer}): Resource
+        add_image_view: function(self: Graph, p_id: string, p_image: Resource, p_view?: wbe.RendImageViewParamsVK): Resource
+        add_clamp_to_edge_sampler: function(self: Graph, p_id: string, p_params?: wbe.RendSamplerParamsVK): Resource
+        import_resource: function(self: Graph, p_id: string): Resource
+        port: function(self: Graph, p_id: string): Resource
+        reference: function(self: Graph, p_id: string): Resource
+        indirect_dispatch: function(self: Graph, p_pipeline: Resource,
+            p_indirect_buffer: Resource | string, p_offset: integer,
+            p_aliases?: {string:Resource | string}): {{ dispatch.type }}
+        as_subgraph: function(self: Graph, p_id: string, p_ports: {string:Resource}, p_imports?: {string}): Task
+        add: function(self: Graph, p_task: Task): Task
+        get: function(self: Graph, p_id: string): Task
+        import_task: function(self: Graph, p_id: string): Task
+        chain: function(self: Graph, p_resource: Resource, p_tasks: {Task})
+        chain: function(self: Graph, p_resources: {Resource}, p_tasks: {Task})
+        chain: function(self: Graph, p_bundle: ResourceBundle, p_tasks: {Task})
+        build: function(self: Graph, p_imports?: {string}, p_ports?: {string}): wbe.RendGraphRecipeVK
+{% for constructor in api.constructors %}
+        {{ constructor.method }}: function(self: Graph, p_id: string, p_params: {{ constructor.params_type }},
+            p_options?: TaskOptions): Task
+{% endfor %}
+    end
+
+    enum_name: function(p_value: string | integer): string
+    buffer: function(p_id: string, p_usage: wbe.RendResPrimaryUsageVK, p_size: integer): Resource
+    storage_buffer: function(p_id: string, p_size: integer): Resource
+    image: function(p_id: string, p_usage: wbe.RendResPrimaryUsageVK, p_format: wbe.ImageFormatVK | integer,
+        p_extent?: wbe.RendExtent2DParamsVK, p_additional_usage?: {wbe.ImageUsageFlagVK | integer},
+        p_mip_levels?: integer): Resource
+    storage_image: function(p_id: string, p_format: wbe.ImageFormatVK | integer, p_width: integer, p_height: integer,
+        p_additional_usage?: {wbe.ImageUsageFlagVK | integer}): Resource
+    image_view: function(p_id: string, p_image: Resource, p_view?: wbe.RendImageViewParamsVK): Resource
+    clamp_to_edge_sampler: function(p_id: string, p_params?: wbe.RendSamplerParamsVK): Resource
+    import_resource: function(p_id: string): Resource
+    port: function(p_id: string): Resource
+    reference: function(p_id: string): Resource
+    indirect_dispatch: function(p_pipeline: Resource, p_indirect_buffer: Resource | string, p_offset: integer,
+        p_aliases?: {string:Resource | string}): {{ dispatch.type }}
+    subgraph: function(p_id: string, p_recipe: wbe.RendGraphRecipeVK, p_ports: {string:Resource}): Task
+    graph: function(): Graph
+    new: function(): Graph
+end
+
+return render_graph

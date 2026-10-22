@@ -18,8 +18,9 @@
 #include "core/logging/log.hh"
 #include "core/logging/logging_manager.hh"
 #include "core/reflection/reflection_defs.hh"
+#include "generated/label_manager.gen.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include "utils/utils.hh"
 #include <gtest/gtest.h>
 #include <memory>
@@ -37,16 +38,20 @@ WBE_LABEL(WBE_TEST_LABEL_3, WBE_CHANNEL)
 
 class LogTestMock : public WBE::ILog {
 public:
-    std::string_view get_channel_name(WBE::HashCode p_label) {
-        return WBE::EngineCore::get_singleton()->label_manager->get_label_name(p_label);
-    }
-
     LogTestMock(WBE::ChannelID p_channel_id, std::ostream& p_ostream) : channel_id(p_channel_id), ostream(&p_ostream) {
         *ostream << "Construct " << get_channel_name(channel_id) << '\n';
     }
 
     virtual ~LogTestMock() override {
         *ostream << "Destruct " << get_channel_name(channel_id) << '\n';
+    }
+    LogTestMock(const LogTestMock&) = delete;
+    LogTestMock(LogTestMock&&) = delete;
+    LogTestMock& operator=(const LogTestMock&) = delete;
+    LogTestMock& operator=(LogTestMock&&) = delete;
+
+    std::string_view get_channel_name(WBE::HashCode p_label) {
+        return WBE::EngineCore::get_singleton()->label_manager->get_label_name(p_label);
     }
 
     WBE::ChannelID channel_id;
@@ -70,7 +75,7 @@ public:
 };
 
 TEST(WBELoggingManagerTest, GetLogConstructDestruct) {
-    std::unique_ptr<WBE::Global> global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    std::unique_ptr<WBE::Global> global = WBE::make_test_global();
     std::stringstream ss;
     {
         WBE::LoggingManager<LogTestMock, std::ostream> logging_manager(ss);

@@ -13,7 +13,6 @@
 # limitations under the License.
 import json
 import os
-import importlib.util
 from typing import Any, Callable
 from build_script.reflection.code_gen import WBECodeGenerator
 from build_script.reflection.metadata_types import WBEMetadata
@@ -41,26 +40,6 @@ class WBEReflector:
         self.metadata_path = metadata_path
         self.metadata = WBEMetadata()
         self._gen_file_infos = gen_file_infos
-
-    def load_script_config(self, load_path : str) -> None:
-        """Load config scripts.
-
-        Args:
-            load_path: The path to load the config script.
-
-        Raises:
-            RuntimeError: If the config script is not runnable.
-        """
-        print("WBEReflect: Loading configuration script: " + load_path)
-        if not os.path.exists(load_path):
-            raise FileNotFoundError(f"File not found: {load_path}")
-        spec = importlib.util.spec_from_file_location("config", load_path)
-        if spec is None:
-            raise RuntimeError(f"Failed to load spec from path: {load_path}")
-        module_config = importlib.util.module_from_spec(spec)
-        if spec.loader is not None:
-            spec.loader.exec_module(module_config)
-            module_config.register(self)
 
     def register_metadata(self, metadata: WBEMetadata) -> None:
         self.metadata = metadata
@@ -91,18 +70,20 @@ class WBEReflector:
         """Do checkings."""
         print("WBEReflect: Checking...")
         self._check_redefinition(self.metadata.labels)
+        self._check_redefinition(self.metadata.enums, lambda enum: enum.qualified_name)
         self._check_hashing_collision("channels", self.metadata.labels, lambda label: hash_str(label.name))
 
     def _write_to_file(self, path : str, str_content : str) -> None:
         with open(path, "w+") as channel_file:
             channel_file.write(str_content)
 
-    def _check_redefinition(self, objs: list[Any]) -> None:
+    def _check_redefinition(self, objs: list[Any], get_name: Callable[[Any], str] = lambda obj: obj.name) -> None:
         seen: set[str] = set()
         for check in objs:
-            if check.name in seen:
-                raise RuntimeError(f"\"{check.name}\" is redefined.")
-            seen.add(check.name)
+            name = get_name(check)
+            if name in seen:
+                raise RuntimeError(f"\"{name}\" is redefined.")
+            seen.add(name)
 
     def _check_hashing_collision(self, dict_name: str, objs: list[Any],
                                  hash_function: Callable[[Any], int]) -> None:

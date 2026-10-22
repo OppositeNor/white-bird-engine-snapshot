@@ -1,0 +1,24 @@
+# Copyright 2025 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+[[resources]]
+id = "test_sine_stereo"
+source_type = "audio"
+source_file = "assets/audio/test_sine_stereo.wav"
+is_stream = false
+
+[[resources]]
+id = "test_sine_mono_stream"
+source_type = "audio"
+source_file = "assets/audio/test_sine_mono.ogg"
+is_stream = true

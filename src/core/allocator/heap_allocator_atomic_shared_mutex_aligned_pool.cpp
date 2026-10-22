@@ -119,6 +119,8 @@ void HeapAllocatorAtomicSharedMutexAlignedPool::deallocate(MemID p_mem) {
         return;
     }
     IdleListNode* insert_pos = get_idle_node_before(data_loc).get();
+    // Unique lock when insert free memory: shared readers must not walk the list while nodes are merged and freed.
+    boost::upgrade_to_unique_lock unique_lock(lock);
     insert_free_memory(insert_pos, data_loc, data_size);
 }
 

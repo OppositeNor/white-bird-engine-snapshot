@@ -22,7 +22,7 @@
 
 namespace WhiteBirdEngine {
 DynamicModule::DynamicModule(const Path& p_module_path) : module_path(p_module_path) {
-    auto path_str = static_cast<std::string>(p_module_path);
+    auto path_str = p_module_path.string();
     handle = dlopen(path_str.c_str(), RTLD_LAZY);
     if (handle == nullptr) {
         throw std::runtime_error(std::format("Failed to open module at path: {}.", path_str));
@@ -37,7 +37,7 @@ void* DynamicModule::get_function_helper(std::string_view p_function_symbol) {
     auto* result = dlsym(handle, std::string(p_function_symbol).c_str());
     if (result == nullptr) {
         throw std::runtime_error(std::format(
-            "Failed to load function with symobol: {} in module at path: {}", p_function_symbol, static_cast<std::string>(module_path)));
+            "Failed to load function with symobol: {} in module at path: {}", p_function_symbol, module_path.string()));
     }
     return result;
 }

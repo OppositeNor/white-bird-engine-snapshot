@@ -18,7 +18,7 @@
 #include "core/allocator/heap_allocator_aligned_pool_impl_list.hh"
 #include "core/allocator/i_allocator.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include "utils/defs.hh"
 #include <algorithm>
 #include <cstddef>
@@ -34,11 +34,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEAllocAlignedPoolImplicitListTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -92,23 +92,23 @@ TEST_F(WBEAllocAlignedPoolImplicitListTest, AlignmentTest) {
     WBE::MemID mem1 = allocator.allocate(1, ALIGN_REQ);
     ASSERT_EQ(mem1 % ALIGN_REQ, 0);
     WBE::MemID mem2 = allocator.allocate(1, ALIGN_REQ * 2);
-    ASSERT_EQ(mem2 % 2 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem2 % (2 * ALIGN_REQ), 0);
     WBE::MemID mem3 = allocator.allocate(1, ALIGN_REQ * 3);
-    ASSERT_EQ(mem3 % 3 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem3 % (3 * ALIGN_REQ), 0);
     WBE::MemID mem4 = allocator.allocate(1, ALIGN_REQ * 4);
-    ASSERT_EQ(mem4 % 4 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem4 % (4 * ALIGN_REQ), 0);
     WBE::MemID mem5 = allocator.allocate(1, ALIGN_REQ * 5);
-    ASSERT_EQ(mem5 % 5 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem5 % (5 * ALIGN_REQ), 0);
     WBE::MemID mem6 = allocator.allocate(1, ALIGN_REQ * 6);
-    ASSERT_EQ(mem6 % 6 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem6 % (6 * ALIGN_REQ), 0);
     WBE::MemID mem7 = allocator.allocate(1, ALIGN_REQ * 7);
-    ASSERT_EQ(mem7 % 7 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem7 % (7 * ALIGN_REQ), 0);
     WBE::MemID mem8 = allocator.allocate(1, ALIGN_REQ * 8);
-    ASSERT_EQ(mem8 % 8 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem8 % (8 * ALIGN_REQ), 0);
     WBE::MemID mem9 = allocator.allocate(1, ALIGN_REQ * 9);
-    ASSERT_EQ(mem9 % 9 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem9 % (9 * ALIGN_REQ), 0);
     WBE::MemID mem10 = allocator.allocate(1, ALIGN_REQ * 10);
-    ASSERT_EQ(mem10 % 10 * ALIGN_REQ, 0);
+    ASSERT_EQ(mem10 % (10 * ALIGN_REQ), 0);
 
     // False alignments
     ASSERT_THROW(allocator.allocate(3, 0), std::runtime_error);

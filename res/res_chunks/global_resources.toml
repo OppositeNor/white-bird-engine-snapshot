@@ -1,0 +1,24 @@
+# Copyright 2025 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+include = [
+    "assets/meshes/cube.toml",
+    "assets/shaders/main_pipeline/main_pipeline_shader.toml",
+    "assets/shaders/forward_cook_torrance_pbr/forward_cook_torrance_pbr_shader.toml",
+    "assets/shaders/shadowmap_spot/shadowmap_spot_shader.toml",
+    "assets/shaders/kawase_blur/kawase_blur_shader.toml",
+    "assets/shaders/max_downsample/max_downsample_shader.toml",
+    "assets/materials/default_material.toml",
+    "res_chunks/test_global_resources.toml",
+]
+resources = []

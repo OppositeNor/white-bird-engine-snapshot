@@ -1,0 +1,39 @@
+# Copyright 2025 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+scope = "test_only"
+include = [
+    "assets/meshes/triangle.toml",
+    "assets/images/test_images.toml",
+    "assets/audio/test_audio.toml",
+    "assets/shaders/billboard/billboard_shader.toml",
+    "assets/shaders/draw_triangle/draw_triangle_shader.toml",
+    "assets/shaders/draw_cube_unshaded/draw_cube_unshaded_shader.toml",
+    "assets/shaders/draw_skinned_mesh/draw_skinned_mesh_shader.toml",
+    "assets/shaders/deferred_gbuffer/deferred_gbuffer_shader.toml",
+    "assets/shaders/deferred_composition/deferred_composition_shader.toml",
+    "assets/shaders/svo/svo.toml",
+    "assets/shaders/svo_2/svo_2.toml",
+    "assets/shaders/svo_3/svo_3.toml",
+    "assets/shaders/octree/octree.toml",
+    "assets/shaders/bloom/bloom_shader.toml",
+    "assets/shaders/sort/sort.toml",
+    "assets/shaders/prefix_sum/large_prefix_scan.toml",
+    "assets/shaders/dedup/dedup.toml",
+    "assets/shaders/pixel_sort/pixel_sort_shader.toml",
+    "assets/scripts/teal/lua_scripts.toml",
+]
+resources = [
+    { id = "test_text", source_type = "text", source_file = "test_text_files/test_file_utf8.txt" },
+    { id = "test_script", source_type = "script", source_file = "test_scripts/test_script.lua" },
+]

@@ -19,7 +19,7 @@
 #include "core/memory/reference_strong.hh"
 #include "global/global.hh"
 #include "mock_heap_allocator_aligned.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include <cstdint>
 #include <cstdlib>
 #include <gtest/gtest.h>
@@ -32,11 +32,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBERefStrongTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -87,7 +87,7 @@ TEST_F(WBERefStrongTest, ConstructDestruct) {
     class TestClass {
     public:
         int* modify_val;
-        TestClass(int* p_modify_val) : modify_val(p_modify_val) {
+        explicit TestClass(int* p_modify_val) : modify_val(p_modify_val) {
             ++(*modify_val);
         }
         ~TestClass() {
@@ -159,7 +159,7 @@ TEST_F(WBERefStrongTest, NullReference) {
 
 class TestClass {
 public:
-    TestClass(int* p_val) : val(p_val) {
+    explicit TestClass(int* p_val) : val(p_val) {
         ++(*p_val);
     }
     ~TestClass() {
@@ -247,7 +247,7 @@ TEST_F(WBERefStrongTest, DynamicCastRef) {
     class DerivedClass : public BaseClass {
     public:
         int derived_value = 123;
-        int get_type() const override {
+        virtual int get_type() const override {
             return 2;
         }
     };
@@ -255,7 +255,7 @@ TEST_F(WBERefStrongTest, DynamicCastRef) {
     class AnotherClass : public BaseClass {
     public:
         int another_value = 456;
-        int get_type() const override {
+        virtual int get_type() const override {
             return 3;
         }
     };

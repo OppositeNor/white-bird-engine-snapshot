@@ -1,0 +1,4 @@
+interface:
+  display_name: "White Bird Render Graph"
+  short_description: "Build and diagnose Vulkan render graphs"
+  default_prompt: "Use $white-bird-render-graph to add a recipe task, a task type, or its resource dependencies."

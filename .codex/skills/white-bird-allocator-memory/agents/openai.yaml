@@ -1,0 +1,3 @@
+interface:
+  display_name: "White Bird Allocator and Memory"
+  short_description: "Use engine allocators and ownership handles"

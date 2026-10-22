@@ -1,7 +1,5 @@
 # White Bird Engine
 
-**Note: This repo is only the core layer of the engine. The full engine is still under development.**
-
 > A free game engine built for rhythm game development.
 >
 > Licensed under [Apache License Version 2.0](https://github.com/OppositeNor/white-bird-engine/blob/main/LICENSE).
@@ -31,26 +29,35 @@ Install build dependencies:
 sudo pacman -S cmake clang ninja
 ```
 
-It is suggested to use Anaconda for setting up the build environment.
-
-You can install Anaconda from [here](https://github.com/conda-forge/miniforge).
+Install [Miniforge](https://github.com/conda-forge/miniforge) to manage the build environment with Conda.
 
 ### Setting up build environment
 
-First create a conda environment.
+From the repository root, create and activate the Linux build environment:
 
 ```sh
-conda env create -n white-bird-engine python=3.13
+conda env create -f environment.yml
 conda activate white-bird-engine
 ```
 
-Install the dependencies from `requirements.txt`
+To update an existing environment:
 
 ```sh
-pip install -r requirements.txt
+conda env update -n white-bird-engine -f environment.yml
+conda activate white-bird-engine
 ```
 
-Run the python script to build the project.
+`environment.yml` installs the Python dependencies and requests `libstdcxx-ng>=16` from conda-forge.
+The runtime provides `GLIBCXX_3.4.35`, required by the native model compiler when built with the current system toolchain.
+Updating the environment resolves the older Conda `libstdc++.so.6` mismatch without an `LD_PRELOAD` workaround.
+
+The build script builds the local `wbe-utils-model-compiler` and pyktx bindings automatically; no separate pip installation is
+needed. Keep the environment activated when running `build.py`, `./build-debug`, or `validation.py`.
+
+The C++ runtime is licensed under GPLv3 **with the GCC Runtime Library Exception 3.1**. For ordinary GCC/Clang builds,
+this exception permits linking the runtime while keeping this project's Apache-2.0 license. Redistributing the runtime
+library itself still requires complying with its license, including applicable notices and source requirements.
+See the [GCC runtime licensing FAQ](https://www.gnu.org/licenses/gcc-exception-3.1-faq.html).
 
 ### Build
 
@@ -69,12 +76,20 @@ python ./build.py -t release-gcc    # Release target with GCC compiler
 python ./build.py -t deploy         # Deploy target with GCC compiler
 ```
 
+### Static model categories
+
+Static models in `res/assets/models/models.json` use `source_files` to combine models into shared geometry.
+The compiler emits one `<id>.mesh` resource with `opaque_instances`, `masked_instances`, and `double_sided_opaque_instances`
+categories. Opaque glTF materials with `doubleSided: true` enter the third category. The deferred test draws this category
+with its own pipeline, without face culling, and reverses back-face
+lighting normals. See the [model compiler documentation](dependencies/wbe-utils-model-compiler/README.md) for the manifest contract.
+
 ## Contribution
 
 ### Use of AI
 
 Use of AI assistants is allowed and encouraged for this project. At the start of every new AI session, please have the
-agent read [CONVENTIONS_FOR_AI.md](./CONVENTIONS_FOR_AI.md) first. That file is a compact, high-density reference written
+agent read [AGENTS.md](./AGENTS.md) first. That file is a compact, high-density reference written
 specifically for AI agents and covers the project's layered architecture, build workflow, test layout, memory model, and
 naming rules.
 

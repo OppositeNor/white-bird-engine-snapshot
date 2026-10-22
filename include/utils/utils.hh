@@ -15,8 +15,11 @@
 #ifndef WBE_FILE_UTILS_HH
 #define WBE_FILE_UTILS_HH
 
+#include "core/reflection/reflection_defs.hh"
 #include "utils/defs.hh"
 #include <algorithm>
+#include <charconv>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -24,27 +27,29 @@
 #include <fstream>
 #include <ios>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace WhiteBirdEngine {
 
-// Types of encoding
-enum class EncodeType {
+// Types of encoding. Reflected; the lowercase aliases are the names used in resource schemes.
+enum class WBE_META(WBE_REFLECT_ENUM) EncodeType {
     // Unknown encode type.
-    UNKNOWN,
+    UNKNOWN WBE_META(WBE_SERIALIZATION_ALIASES(unknown)),
     // UTF8 (most recommended)
-    UTF8,
+    UTF8 WBE_META(WBE_SERIALIZATION_ALIASES(utf8)),
     // UTF16 little endian
-    UTF16LE,
+    UTF16LE WBE_META(WBE_SERIALIZATION_ALIASES(utf16le)),
     // UTF16 big endian
-    UTF16BE,
+    UTF16BE WBE_META(WBE_SERIALIZATION_ALIASES(utf16be)),
     // UTF32 little endian
-    UTF32LE,
+    UTF32LE WBE_META(WBE_SERIALIZATION_ALIASES(utf32le)),
     // UTF32 big endian
-    UTF32BE
+    UTF32BE WBE_META(WBE_SERIALIZATION_ALIASES(utf32be))
 };
 
 // Type of access.
@@ -273,6 +278,51 @@ inline size_t find_first_pos(std::string_view p_str, std::string_view p_tokens) 
 }
 
 /**
+ * @brief Parse a whole string as an integer, without throwing.
+ *
+ * The text must be exactly one integer in base p_base: no surrounding whitespace, no `+`, and a `-` only for signed
+ * types. p_text does not need to be NUL-terminated, so a view into a larger string, such as a substring, works.
+ *
+ * @tparam T The integer type; bool is not accepted.
+ * @param p_text The text to parse.
+ * @param p_base The base, from 2 to 36.
+ * @return The integer, or std::nullopt when p_text is empty, holds anything besides the integer, or the value does not
+ * fit T.
+ */
+template <typename T>
+    requires std::integral<T> && (!std::same_as<T, bool>)
+std::optional<T> try_parse_integer(std::string_view p_text, int p_base = 10) {
+    T value{};
+    const char* text_end = p_text.data() + p_text.size();
+    const auto [end, error] = std::from_chars(p_text.data(), text_end, value, p_base);
+    if (error != std::errc{} || end != text_end) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+/**
+ * @brief Parse a whole string as an integer.
+ *
+ * Accepts what try_parse_integer() accepts.
+ *
+ * @tparam T The integer type; bool is not accepted.
+ * @param p_text The text to parse.
+ * @param p_base The base, from 2 to 36.
+ * @return The integer.
+ * @throws std::runtime_error If p_text is not exactly one integer in base p_base, or the value does not fit T.
+ */
+template <typename T>
+    requires std::integral<T> && (!std::same_as<T, bool>)
+T parse_integer(std::string_view p_text, int p_base = 10) {
+    const std::optional<T> value = try_parse_integer<T>(p_text, p_base);
+    if (!value.has_value()) {
+        throw std::runtime_error(std::format("Failed to parse \"{}\" as an integer in base {}.", p_text, p_base));
+    }
+    return *value;
+}
+
+/**
  * @brief Split the string with respect to a list of tokens.
  *
  * @todo Test
@@ -289,31 +339,6 @@ inline std::vector<std::string> split_string(std::string p_str, std::string_view
         split_pos = find_first_pos(p_str, p_tokens);
     }
     return result;
-}
-
-/**
- * @brief Get an encode type from a string.
- *
- * @param p_str The string to get the encode type.
- * @return The encode type.
- */
-inline EncodeType get_encode_type_from_str(std::string_view p_str) {
-    if (p_str == "utf8") {
-        return EncodeType::UTF8;
-    }
-    if (p_str == "utf16le") {
-        return EncodeType::UTF16LE;
-    }
-    if (p_str == "utf16be") {
-        return EncodeType::UTF16BE;
-    }
-    if (p_str == "utf32le") {
-        return EncodeType::UTF32LE;
-    }
-    if (p_str == "utf32be") {
-        return EncodeType::UTF32BE;
-    }
-    return EncodeType::UNKNOWN;
 }
 
 /**
@@ -460,12 +485,12 @@ inline HashCode dynam_hash_ptr(const void* p_ptr) {
 
 using ChannelID = HashCode;
 
-// Color space
-enum class ColorSpace {
+// Color space. Reflected; the lowercase aliases are the names used in resource schemes.
+enum class WBE_META(WBE_REFLECT_ENUM) ColorSpace {
     // RGB space
-    RGB,
+    RGB WBE_META(WBE_SERIALIZATION_ALIASES(rgb)),
     // SRGB space
-    SRGB
+    SRGB WBE_META(WBE_SERIALIZATION_ALIASES(srgb))
 };
 
 /**

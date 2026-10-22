@@ -12,7 +12,11 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 */
-#include "defs.slang"
+#include "utils.slang"
+
+#ifdef WBE_REFLECTION_METADATA
+ParameterBlock<MeshContractMetadata> mesh;
+#endif
 
 /**
  * @brief Vertex shader output / fragment shader input for the spot-light shadow map pass.
@@ -25,18 +29,30 @@ struct ShadowVSOutput {
 /**
  * @brief Constant buffer providing the spot light's view and projection matrices.
  */
-ConstantBuffer<CameraInfo> light_camera_info;
+struct ShadowDescriptorIndices {
+    [WBE_DESCRIPTOR("uniform_buffer", "shadow_light_info")]
+    uint2 light_camera_info;
+    MeshDescriptorIndices mesh;
+};
+
+[[vk::push_constant]]
+ConstantBuffer<ShadowDescriptorIndices> descriptor_indices;
 
 /**
- * @brief Transform a vertex into the spot light's clip space for depth-only rendering.
- * @param p_input The incoming vertex attributes.
- * @return The clip-space vertex output for the shadow map pass.
+ * @brief Transform a mesh vertex into spot-light clip space.
+ * @param p_input Incoming vertex attributes.
+ * @param p_instance_id Index into mesh.instances.
+ * @return Clip-space vertex output.
  */
 [shader("vertex")]
-ShadowVSOutput vertex_main(Vertex3DTexturedInput p_input) {
+ShadowVSOutput vertex_main(Vertex3DTexturedInput p_input, uint p_instance_id : SV_VulkanInstanceID) {
+    ConstantBuffer<CameraInfo> light_camera_info = ResourceDescriptorHeap[descriptor_indices.light_camera_info.x];
+    StructuredBuffer<InstanceData> instances = ResourceDescriptorHeap[descriptor_indices.mesh.instances.x];
+    InstanceData instance = instances[p_instance_id];
+    float4 world_position = mul(load_mesh_node(descriptor_indices.mesh, instance.node_index).transform, float4(p_input.position.xyz, 1.0));
     ShadowVSOutput output;
-    float4 world_position = float4(p_input.position.xyz, 1.0);
-    output.position = mul(light_camera_info.proj, mul(light_camera_info.view, world_position));
+    float4 light_view_position = mul(light_camera_info.view, world_position);
+    output.position = mul(light_camera_info.proj, light_view_position);
     return output;
 }
 

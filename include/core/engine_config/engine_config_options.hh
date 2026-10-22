@@ -54,15 +54,20 @@ struct WBE_META(WBE_CONFIG_OPTION, WBE_CLA_CONFIGURATION) EngineConfigOptions fi
     WBE_META(WBE_REFLECT)
     size_t per_tick_stack_size = WBE_KI_B(64);
     /**
-     * @brief The size of the global memory pool.
+     * @brief The capacity of the global memory pool for allocations below 1 KiB.
      */
     WBE_META(WBE_REFLECT)
-    size_t global_mem_pool_size = WBE_KI_B(128);
+    size_t global_mem_small_pool_size = WBE_MI_B(1);
     /**
-     * @brief The number of arenas in the global memory pool.
+     * @brief The capacity of the global memory pool for allocations from 1 KiB to 1 MiB.
      */
     WBE_META(WBE_REFLECT)
-    size_t global_mem_pool_arena_count = 4;
+    size_t global_mem_medium_pool_size = WBE_MI_B(15);
+    /**
+     * @brief The capacity of the global memory pool for allocations above 1 MiB.
+     */
+    WBE_META(WBE_REFLECT)
+    size_t global_mem_large_pool_size = WBE_MI_B(512);
     /**
      * @brief The size of the thread memory pool.
      */
@@ -73,6 +78,11 @@ struct WBE_META(WBE_CONFIG_OPTION, WBE_CLA_CONFIGURATION) EngineConfigOptions fi
      */
     WBE_META(WBE_REFLECT)
     size_t resource_mem_pool_size = WBE_MI_B(64);
+    /**
+     * @brief The number of worker threads. Zero selects the available CPU thread count after reserving render and logic threads.
+     */
+    WBE_META(WBE_REFLECT)
+    size_t worker_thread_count = 0;
 
     /**
      * @brief The utility name while running the program.

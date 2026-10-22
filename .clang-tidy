@@ -17,6 +17,7 @@ Checks: >
   -objc-*,
   -openmp-*,
   -portability-*,
+  -concurrency-mt-unsafe,
   -performance-unnecessary-value-param,
   -readability-magic-numbers,
   -readability-named-parameter,
@@ -25,17 +26,17 @@ Checks: >
   -readability-implicit-bool-conversion,
   -readability-isolate-declaration,
   -readability-convert-member-functions-to-static,
-  -readability-function-size,
   -readability-simplify-boolean-expr,
   -readability-use-anyofallof,
   -readability-math-missing-parentheses,
   -bugprone-easily-swappable-parameters,
   -bugprone-implicit-widening-of-multiplication-result,
   -bugprone-derived-method-shadowing-base-method,
+  -bugprone-invalid-enum-default-initialization,
+  -bugprone-exception-escape,
   -misc-non-private-member-variables-in-classes,
   -misc-no-recursion,
   -misc-const-correctness,
-  -misc-use-anonymous-namespace,
   -misc-confusable-identifiers,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   -cppcoreguidelines-avoid-magic-numbers,
@@ -44,12 +45,12 @@ Checks: >
   -cppcoreguidelines-init-variables,
   -cppcoreguidelines-macro-usage,
   -cert-err58-cpp,
+  -cert-dcl03-c,
   -google-readability-avoid-underscore-in-googletest-name,
   -google-explicit-constructor,
   -google-readability-todo,
   -google-default-arguments,
   -hicpp-named-parameter,
-  -hicpp-function-size,
   -hicpp-avoid-c-arrays,
   -hicpp-use-override,
   -hicpp-explicit-conversions,
@@ -57,6 +58,7 @@ Checks: >
   -hicpp-signed-bitwise,
   -hicpp-use-auto,
   -hicpp-move-const-arg,
+  -hicpp-static-assert,
   -modernize-use-trailing-return-type,
   -modernize-use-nodiscard,
   -modernize-use-override,
@@ -77,14 +79,28 @@ Checks: >
   -cppcoreguidelines-pro-bounds-constant-array-index,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -cppcoreguidelines-pro-type-vararg,
   -performance-no-int-to-ptr,
   -performance-enum-size,
+  -misc-use-internal-linkage,
+  -misc-misplaced-const,
+  -misc-static-assert,
+  -bugprone-misplaced-widening-cast,
+  -readability-trailing-comma
 
 CheckOptions:
   # Include order: local headers with quotes first, then system headers with angle brackets
   # Both should be alphabetically sorted
   - key: llvm-include-order.priority
     value: "1"
+
+  # Include cleaner policy:
+  # - Keep missing include diagnostics enabled.
+  # - Disable direct unused include diagnostics to better support template-heavy dependencies.
+  - key: misc-include-cleaner.MissingIncludes
+    value: "true"
+  - key: misc-include-cleaner.UnusedIncludes
+    value: "false"
   
   # Naming conventions based on observed patterns
   - key: readability-identifier-naming.ClassCase
@@ -240,5 +256,5 @@ WarningsAsErrors: ''
 # Inherit parent config if exists
 InheritParentConfig: false
 
-# Use .clang-format file for formatting
+# Use workspace .clang-format for formatting/fix-its (including indentation constraints)
 FormatStyle: file

@@ -1,0 +1,33 @@
+/* Copyright 2025 OppositeNor
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+/**
+ * @file max_downsample.slang
+ * @brief Test kernel that evaluates max_downsample at every destination texel and writes the results row by row.
+ * @details Required defines: SOURCE_WIDTH, SOURCE_HEIGHT, DESTINATION_WIDTH, and DESTINATION_HEIGHT.
+ */
+#include "max_downsample/max_downsample_utils.slang"
+
+Texture2D<float4> source;
+RWStructuredBuffer<float4> output;
+
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void main(uint3 p_thread_id : SV_DispatchThreadID) {
+    if (p_thread_id.x >= DESTINATION_WIDTH || p_thread_id.y >= DESTINATION_HEIGHT) {
+        return;
+    }
+    output[p_thread_id.y * DESTINATION_WIDTH + p_thread_id.x] = max_downsample(source, uint2(SOURCE_WIDTH, SOURCE_HEIGHT),
+        uint2(DESTINATION_WIDTH, DESTINATION_HEIGHT), p_thread_id.xy);
+}

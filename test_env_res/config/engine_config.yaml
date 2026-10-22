@@ -1,5 +1,0 @@
-per_tick_stack_size: 65536
-global_mem_pool_size: 16777216
-global_mem_pool_arena_count: 4
-thread_mem_pool_size: 16384
-resource_mem_pool_size: 536870912

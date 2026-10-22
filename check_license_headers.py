@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from pathlib import Path
-import build_config
 from build_config import project_files
 
 
@@ -20,6 +19,29 @@ LICENSE_KEYWORDS = [
     "Licensed under the Apache License, Version 2.0",
     "http://www.apache.org/licenses/LICENSE-2.0"
 ]
+
+LICENSE_HEADER_FILE_EXTENSIONS = {
+    ".hh",
+    ".cpp",
+    ".py",
+    ".cmake",
+    ".jinja",
+    ".toml",
+}
+
+LICENSE_HEADER_FILE_NAMES = {
+    "CMakeLists.txt",
+}
+
+
+def is_license_tracked_file(file_path: str) -> bool:
+    """Return whether a file should be checked for an Apache license header.
+
+    Args:
+        file_path: The file path to inspect.
+    """
+    path = Path(file_path)
+    return path.suffix in LICENSE_HEADER_FILE_EXTENSIONS or path.name in LICENSE_HEADER_FILE_NAMES
 
 def has_apache_license_header(file_pathes: list[str], max_lines: int | None = 30) -> None:
     """Check if all files has an Apache 2.0 license header.
@@ -53,5 +75,5 @@ def has_apache_license_header(file_pathes: list[str], max_lines: int | None = 30
         print(f"{len(file_pathes)} files checked. All files contains a license header.")
 
 if __name__ == "__main__":
-    sources = [source for source in project_files if Path(source).suffix in build_config.source_extensions]
+    sources = [source for source in project_files if is_license_tracked_file(source)]
     has_apache_license_header(sources)

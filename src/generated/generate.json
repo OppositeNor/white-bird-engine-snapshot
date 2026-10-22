@@ -7,5 +7,51 @@
             "metadata" : ".metadata",
             "serializables" : ".serializables"
         }
+    },
+    {
+        "out_dir" : "${source_dir}/per_target/${build_target}/generated",
+        "output_name" : "render_task_registry.gen.cpp",
+        "template" : "render_task_registry.cpp.jinja",
+        "data" : {
+            "metadata" : ".metadata",
+            "render_tasks" : ".render_tasks"
+        }
+    },
+    {
+        "out_dir" : "${build_dir}/teal",
+        "output_name" : "wbe.d.tl",
+        "template" : "teal_types.d.tl.jinja",
+        "data" : {
+            "metadata" : ".metadata",
+            "reflect_script" : ".reflect_script"
+        }
+    },
+    {
+        "out_dir" : "${build_dir}/teal/render_graph_utils",
+        "output_name" : "render_graph.tl",
+        "template" : "teal_render_graph.tl.jinja",
+        "data" : {
+            "metadata" : ".metadata",
+            "render_tasks" : ".render_tasks",
+            "reflect_script" : ".reflect_script"
+        }
+    },
+    {
+        "out_dir" : "${build_dir}/teal/render_graph_utils",
+        "output_name" : "render_graph_tasks.tl",
+        "template" : "teal_render_graph_tasks.tl.jinja",
+        "data" : {
+            "metadata" : ".metadata",
+            "render_tasks" : ".render_tasks",
+            "reflect_script" : ".reflect_script"
+        }
+    },
+    {
+        "out_dir" : "${root_dir}",
+        "output_name" : "tlconfig.lua",
+        "template" : "tlconfig.lua.jinja",
+        "data" : {
+            "include_dirs" : ["${root_dir}/res/assets/scripts/teal", "${build_dir}/teal"]
+        }
     }
 ]

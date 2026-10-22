@@ -15,18 +15,18 @@
 #ifndef WBE_FILE_WORKER_HH
 #define WBE_FILE_WORKER_HH
 
-#include "core/core_utils.hh"
-#include "core/job/job_buffer_ring_mpsc.hh"
 #include "core/job/job_handler.hh"
-#include "core/memory/unique.hh"
 #include "platform/file_system/path.hh"
-#include "utils/defs.hh"
 #include "utils/interface/i_singleton.hh"
+#include "utils/utils.hh"
+#include <BS_thread_pool.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <future>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace WhiteBirdEngine {
@@ -38,11 +38,6 @@ namespace WhiteBirdEngine {
  */
 class Worker final : public ISingleton<Worker>, public JobHandler {
 public:
-    /**
-     * @brief Maximum number of tasks that the worker could handle.
-     */
-    static constexpr size_t WORKER_MAX_TASK = 128;
-
     Worker(const Worker&) = delete;
     Worker(Worker&&) noexcept = delete;
     Worker& operator=(const Worker&) = delete;
@@ -51,76 +46,85 @@ public:
     /**
      * @brief Constructor.
      *
-     * @param p_allocator The allocator to allocate
+     * Creates one worker thread. Engine applications should use the configurable constructor.
      */
-    Worker() : allocator(WBE_MI_B(0.5)) {
-        singleton = this;
-        job_buffer = make_unique<JobBufferRingMPSC>(&allocator, &allocator, WORKER_MAX_TASK);
-    }
+    Worker();
 
-    virtual ~Worker() override {
-        // Ensures the job buffer destructs before the allocator.
-        job_buffer.reset();
-        singleton = nullptr;
-    }
+    /**
+     * @brief Construct a worker backed by a thread pool.
+     *
+     * @param p_thread_count The number of threads in the pool.
+     */
+    explicit Worker(size_t p_thread_count);
 
-    virtual void add_job(std::function<void()> p_job) override;
+    virtual ~Worker() override;
+
+    virtual std::future<void> add_job(std::function<void()> p_job) override;
+
+    /**
+     * @brief Submit a value-producing task to the worker pool.
+     * @tparam TFunction Callable type.
+     * @param p_task Task to execute.
+     * @return A future containing the task result.
+     */
+    template <typename TFunction>
+    auto submit_task(TFunction&& p_task) -> std::future<std::invoke_result_t<TFunction>> {
+        return thread_pool.submit_task(std::forward<TFunction>(p_task));
+    }
 
     static Worker* get_singleton() {
         return singleton;
     }
 
     /**
-     * @brief Execute the worker thread.
+     * @brief Get the number of worker threads.
+     *
+     * @return The number of worker threads.
      */
-    void run();
+    size_t get_thread_count() const {
+        return thread_pool.get_thread_count();
+    }
 
     /**
      * @brief Read data from a file.
      *
-     * @param p_promise The promise to retrieve result.
      * @param p_path The path to the file to read.
+     * @return A future containing the file data.
      */
-    void read_file(std::promise<std::vector<char>>& p_promise, const Path& p_path) {
-        read_binary_file(p_promise, p_path);
+    std::future<std::vector<char>> read_file(const Path& p_path) {
+        return read_binary_file<char>(p_path);
     }
 
     /**
      * @brief Read a text file.
      *
-     * @param p_promise The promise to retrieve result.
      * @param p_path The path to the text file.
+     * @return A future containing the file text.
      */
-    void read_text_file(std::promise<std::string>& p_promise, const Path& p_path);
+    std::future<std::string> read_text_file(const Path& p_path);
 
     /**
      * @brief Read a binary file.
      *
      * @tparam T The type of the file's data.
-     * @param p_promise The promise to retrieve result.
      * @param p_path The path to the file.
+     * @return A future containing the file data.
      */
     template <typename T = uint8_t>
-    void read_binary_file(std::promise<std::vector<T>>& p_promise, const Path& p_path) {
-        add_job([&]() {
-            p_promise.set_value(load_binary_file<T>(static_cast<std::string>(p_path).c_str()));
+    std::future<std::vector<T>> read_binary_file(const Path& p_path) {
+        return thread_pool.submit_task([path = p_path]() {
+            return load_binary_file<T>(path.string().c_str());
         });
     }
 
     /**
-     * @brief Stop.
+     * @brief Wait for all queued and running jobs to finish.
      */
-    void stop() {
-        add_job([&]() {
-            should_exit = true;
-        });
-    }
+    void wait();
 
 private:
     inline static Worker* singleton = nullptr;
-    HeapAllocatorDefault allocator;
-    Unique<JobBufferRingMPSC> job_buffer;
-    bool should_exit = false;
+    BS::thread_pool<> thread_pool;
 };
 
 } // namespace WhiteBirdEngine

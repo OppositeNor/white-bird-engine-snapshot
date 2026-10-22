@@ -22,7 +22,8 @@ shutil.rmtree(build_root_dir)
 print(f'WBEClean: Directory "{build_root_dir}" removed.')
 
 print("WBEClean: Removing generated files...")
-files = list_files(root_dir, [dependencies_dir, build_root_dir, os.path.join(root_dir, ".cache"), os.path.join(root_dir, ".git")])
+# list_files matches ignored entries against single path components, so pass directory names.
+files = list_files(root_dir, [os.path.basename(dependencies_dir), os.path.basename(build_root_dir), ".cache", ".git"])
 
 generated_files = [file for file in files if ".gen." in file]
 

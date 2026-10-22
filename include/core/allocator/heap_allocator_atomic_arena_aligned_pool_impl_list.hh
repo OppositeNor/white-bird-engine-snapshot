@@ -189,6 +189,14 @@ public:
     bool is_in_pool(MemID p_mem_id) const;
 
     /**
+     * @brief Check if a memory id lies inside this allocator's memory chunk, without locking or validating the allocation.
+     *
+     * @param p_mem_id The memory ID to check.
+     * @return True if p_mem_id lies inside the memory chunk, false otherwise.
+     */
+    bool is_in_memory_chunk(MemID p_mem_id) const;
+
+    /**
      * @brief Check if each arena is broken. Throws an error if any arena is broken.
      */
     void check_broken() const;
@@ -207,7 +215,6 @@ private:
     void destroy_arenas();
     ArenaAllocator& get_arena(size_t p_arena_index);
     const ArenaAllocator& get_arena(size_t p_arena_index) const;
-    bool is_in_memory_chunk(MemID p_mem_id) const;
     size_t get_arena_index(MemID p_mem_id) const;
 };
 

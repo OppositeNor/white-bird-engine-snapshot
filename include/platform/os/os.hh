@@ -17,6 +17,12 @@
 
 namespace WhiteBirdEngine {
 
+#ifdef __unix__
+#include <unistd.h>
+using PIDType = pid_t;
+#else
+#error "PID type not declared"
+#endif
 /**
  * @class OS
  * @brief Interface to operating system utilities.
@@ -25,6 +31,8 @@ namespace WhiteBirdEngine {
 class OS {
 public:
     OS() = delete;
+
+    static PIDType get_pid();
 };
 
 } // namespace WhiteBirdEngine

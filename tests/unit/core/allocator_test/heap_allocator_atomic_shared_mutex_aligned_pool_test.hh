@@ -18,7 +18,7 @@
 #include "core/allocator/heap_allocator_atomic_shared_mutex_aligned_pool.hh"
 #include "core/allocator/i_allocator.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include "utils/defs.hh"
 #include <atomic>
 #include <cstdlib>
@@ -33,11 +33,11 @@ constexpr size_t AAAPT_HEADER_SIZE = WBE::HeapAllocatorAtomicSharedMutexAlignedP
 
 class WBEAllocAtomicSharedMutexAlignedPoolTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 

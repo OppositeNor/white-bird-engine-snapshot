@@ -1,0 +1,40 @@
+# Copyright 2025 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+include = []
+
+[[resources]]
+id = "svo_3_gather_leaves"
+source_type = "shader"
+src = "assets/shaders/svo_3/svo_gather_leaves.slang"
+dst = "assets/shaders/svo_3/svo_3_gather_leaves.spv"
+metadata = "assets/shaders/svo_3/svo_3_gather_leaves.json"
+
+[[resources]]
+id = "svo_3_gather_leaves_pipeline"
+type = "graphics_pipeline"
+vertex_stage_id = "svo_3_gather_leaves"
+geometry_stage_id = "svo_3_gather_leaves"
+fragment_stage_id = "svo_3_gather_leaves"
+depth_test = false
+depth_write = false
+cull_backfaces = false
+conservative_rasterization = false
+
+[[resources]]
+id = "svo_3_prepare_leaves_shader"
+source_type = "shader"
+src = "assets/shaders/svo_3/svo_3_prepare_leaves.slang"
+dst = "assets/shaders/svo_3/svo_3_prepare_leaves.spv"
+metadata = "assets/shaders/svo_3/svo_3_prepare_leaves.json"
+

@@ -23,6 +23,8 @@
 
 #include <format>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 
 namespace WhiteBirdEngine {
@@ -52,7 +54,10 @@ public:
     TypeUUIDManager() : ISingleton<TypeUUIDManager>() {
         singleton = this;
         {% for type in metadata.classes %}
-        type_name_map[TypeUUID<{{ type.name }}>::UUID] = "{{ type.name }}";
+        register_type_name("{{ type.name }}", TypeUUID<{{ type.name }}>::UUID);
+        {% for alias in type.aliases %}
+        register_type_name("{{ alias }}", TypeUUID<{{ type.name }}>::UUID);
+        {% endfor %}
         {% endfor %}
     }
     virtual ~TypeUUIDManager() override {
@@ -69,6 +74,20 @@ public:
         auto found = type_name_map.find(p_type_uuid);
         if (found == type_name_map.end()) {
             throw std::runtime_error(std::format("Type with id: {} not registered.", p_type_uuid));
+        }
+        return found->second;
+    }
+
+    /**
+     * @brief Get the type UUID according to its registered name or alias.
+     *
+     * @param p_type_name The registered type name or alias.
+     * @return The type UUID.
+     */
+    TypeID get_type_uuid(std::string_view p_type_name) const {
+        auto found = type_uuid_map.find(std::string(p_type_name));
+        if (found == type_uuid_map.end()) {
+            throw std::runtime_error(std::format("Type with name '{}' not registered.", p_type_name));
         }
         return found->second;
     }
@@ -91,8 +110,14 @@ public:
     }
 
 private:
+    void register_type_name(std::string_view p_type_name, TypeID p_type_uuid) {
+        type_uuid_map[std::string(p_type_name)] = p_type_uuid;
+        type_name_map.try_emplace(p_type_uuid, p_type_name);
+    }
+
     inline static TypeUUIDManager* singleton = nullptr;
     std::unordered_map<TypeID, std::string> type_name_map;
+    std::unordered_map<std::string, TypeID> type_uuid_map;
 };
 
 } // namespace WhiteBirdEngine

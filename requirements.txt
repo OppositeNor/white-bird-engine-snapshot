@@ -1,6 +1,0 @@
-clang
-GitPython
-Jinja2
-pydantic
-matplotlib
-./dependencies/wbe-utils-model-compiler

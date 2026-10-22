@@ -47,7 +47,7 @@ class WBEACPCompilerFile(WBEACPCompiler):
             )
 
         source_path, relative_file = self._resolve_resource_file_path(resource_file, manifest_path, res_dir)
-        output_file = result.get("path", relative_file.as_posix())
+        output_file = result.get("path", self._get_default_output_file(relative_file).as_posix())
         if not isinstance(output_file, str) or not output_file:
             raise RuntimeError(
                 f"File resource path must be a non-empty string in {manifest_path}: {resource}."
@@ -56,10 +56,29 @@ class WBEACPCompilerFile(WBEACPCompiler):
 
         output_path = Path.joinpath(res_output_dir, relative_output_file)
         os.makedirs(output_path.parent, exist_ok=True)
-        shutil.copyfile(source_path, output_path)
+        self._write_output_file(source_path, output_path)
 
         result["path"] = relative_output_file.as_posix()
         result.pop(SOURCE_RESOURCE_TYPE_KEY, None)
         result.pop(SOURCE_RESOURCE_FILE_KEY, None)
-        result.pop("file", None)
         return [result]
+
+    def _get_default_output_file(self, relative_file: Path) -> Path:
+        """Get the output path of a resource whose manifest entry sets no path.
+
+        Args:
+            relative_file: The source file, relative to the resource directory.
+
+        Returns:
+            The output file, relative to the output resource directory.
+        """
+        return relative_file
+
+    def _write_output_file(self, source_path: Path, output_path: Path) -> None:
+        """Write the output file of a resource.
+
+        Args:
+            source_path: The resolved source file.
+            output_path: The output file, whose directory exists.
+        """
+        shutil.copyfile(source_path, output_path)

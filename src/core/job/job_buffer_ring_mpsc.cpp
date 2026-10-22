@@ -14,41 +14,53 @@
 */
 #include "core/job/job_buffer_ring_mpsc.hh"
 #include "core/core_utils.hh"
+#include "core/memory/reference_strong.hh"
+#include "utils/defs.hh"
 #include "utils/utils.hh"
 #include <atomic>
 #include <cstddef>
+#include <exception>
 #include <functional>
+#include <future>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 
 namespace WhiteBirdEngine {
 
 JobBufferRingMPSC::JobBufferRingMPSC(HeapAllocatorDefault* p_allocator, size_t p_buffer_size)
-    : buffer(p_allocator), head(0), tail(0) {
+    : allocator(p_allocator), buffer(p_allocator), head(0), tail(0) {
     if (p_buffer_size <= 1) {
         throw std::runtime_error("Buffer has to be at least size 2.");
     }
     buffer.resize(p_buffer_size);
+    available_slot_semaphore.release(static_cast<std::ptrdiff_t>(p_buffer_size - 1));
 }
 
-void JobBufferRingMPSC::add_job(std::function<void()> p_job) {
-    size_t head_l;
-    size_t next;
+std::future<void> JobBufferRingMPSC::add_job(std::function<void()> p_job) {
+    Ref<std::promise<void>> completion_promise = make_ref<std::promise<void>>(allocator);
+    std::future<void> completion_future = completion_promise->get_future();
+    std::function<void()> wrapped_job = [job = std::move(p_job), completion_promise]() mutable {
+        try {
+            job();
+            completion_promise->set_value();
+        } catch (...) {
+            // The returned future is backed by this promise, so job failures must be stored here instead of escaping as
+            // a broken-promise state with the original exception lost.
+            completion_promise->set_exception(std::current_exception());
+        }
+    };
 
-    // Use CAS for lock free increment.
-    while (true) {
-        head_l = head.load(std::memory_order_relaxed);
-        next = ring_increment(head_l, buffer.size());
-        if (next == tail.load(std::memory_order_acquire)) {
-            throw std::runtime_error("Job buffer overflow.");
-        }
-        if (head.compare_exchange_weak(head_l, next, std::memory_order_acquire, std::memory_order_relaxed)) {
-            break;
-        }
-    }
-    buffer[head_l] = std::move(p_job);
-    std::atomic_thread_fence(std::memory_order_release);
+    // Block if the buffer is full.
+    available_slot_semaphore.acquire();
+    std::scoped_lock lock(producer_mutex);
+    size_t head_l = head.load(std::memory_order_relaxed);
+    size_t next = ring_increment(head_l, buffer.size());
+    WBE_DEBUG_ASSERT(next != tail.load(std::memory_order_acquire));
+    buffer[head_l] = std::move(wrapped_job);
+    head.store(next, std::memory_order_relaxed);
     semaphore.release();
+    return completion_future;
 }
 
 std::function<void()> JobBufferRingMPSC::retrieve_job(bool p_block) {
@@ -62,6 +74,7 @@ std::function<void()> JobBufferRingMPSC::retrieve_job(bool p_block) {
     std::function<void()> result = std::move(buffer[tail_l]);
     buffer[tail_l] = nullptr;
     tail.store(ring_increment(tail_l, buffer.size()), std::memory_order_release);
+    available_slot_semaphore.release();
     return result;
 }
 

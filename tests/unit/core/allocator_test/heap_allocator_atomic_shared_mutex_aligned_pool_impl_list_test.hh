@@ -18,7 +18,7 @@
 #include "core/allocator/heap_allocator_atomic_shared_mutex_aligned_pool_impl_list.hh"
 #include "core/allocator/i_allocator.hh"
 #include "global/global.hh"
-#include "platform/file_system/directory.hh"
+#include "test_global.hh"
 #include "utils/defs.hh"
 #include <algorithm>
 #include <atomic>
@@ -39,11 +39,11 @@ namespace WBE = WhiteBirdEngine;
 
 class WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        global = std::make_unique<WBE::Global>(0, nullptr, WBE::Directory({"test_env"}));
+    virtual void SetUp() override {
+        global = WBE::make_test_global();
     }
 
-    void TearDown() override {
+    virtual void TearDown() override {
         global.reset();
     }
 
@@ -100,23 +100,23 @@ TEST_F(WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest, AlignmentTest) 
         WBE::MemID mem1 = allocator.allocate(1, ALIGN_REQ);
         ASSERT_EQ(mem1 % ALIGN_REQ, 0);
         WBE::MemID mem2 = allocator.allocate(1, ALIGN_REQ * 2);
-        ASSERT_EQ(mem2 % 2 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem2 % (2 * ALIGN_REQ), 0);
         WBE::MemID mem3 = allocator.allocate(1, ALIGN_REQ * 3);
-        ASSERT_EQ(mem3 % 3 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem3 % (3 * ALIGN_REQ), 0);
         WBE::MemID mem4 = allocator.allocate(1, ALIGN_REQ * 4);
-        ASSERT_EQ(mem4 % 4 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem4 % (4 * ALIGN_REQ), 0);
         WBE::MemID mem5 = allocator.allocate(1, ALIGN_REQ * 5);
-        ASSERT_EQ(mem5 % 5 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem5 % (5 * ALIGN_REQ), 0);
         WBE::MemID mem6 = allocator.allocate(1, ALIGN_REQ * 6);
-        ASSERT_EQ(mem6 % 6 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem6 % (6 * ALIGN_REQ), 0);
         WBE::MemID mem7 = allocator.allocate(1, ALIGN_REQ * 7);
-        ASSERT_EQ(mem7 % 7 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem7 % (7 * ALIGN_REQ), 0);
         WBE::MemID mem8 = allocator.allocate(1, ALIGN_REQ * 8);
-        ASSERT_EQ(mem8 % 8 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem8 % (8 * ALIGN_REQ), 0);
         WBE::MemID mem9 = allocator.allocate(1, ALIGN_REQ * 9);
-        ASSERT_EQ(mem9 % 9 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem9 % (9 * ALIGN_REQ), 0);
         WBE::MemID mem10 = allocator.allocate(1, ALIGN_REQ * 10);
-        ASSERT_EQ(mem10 % 10 * ALIGN_REQ, 0);
+        ASSERT_EQ(mem10 % (10 * ALIGN_REQ), 0);
         allocated.append_range(std::vector<WBE::MemID>{mem1, mem2, mem3, mem4, mem5, mem6, mem7, mem8, mem9, mem10});
     }
 
@@ -356,7 +356,7 @@ TEST_F(WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest, ConcurrentAlloc
 
     threads.reserve(NUM_THREADS);
     for (int i = 0; i < NUM_THREADS; ++i) {
-        threads.emplace_back([&, i]() {
+        threads.emplace_back([&, i] {
             sync_point.arrive_and_wait();
             std::mt19937 rng(i + 42);
             std::uniform_int_distribution<int> dist(16, 128);
@@ -425,7 +425,7 @@ TEST_F(WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest, ConcurrentDeall
 
     threads.reserve(NUM_THREADS);
     for (int i = 0; i < NUM_THREADS; ++i) {
-        threads.emplace_back([&, i]() {
+        threads.emplace_back([&, i] {
             sync_point.arrive_and_wait();
             for (WBE::MemID mem : thread_mems[i]) {
                 pool.deallocate(mem);
@@ -461,7 +461,7 @@ TEST_F(WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest, ConcurrentMixed
 
     threads.reserve(NUM_THREADS);
     for (int i = 0; i < NUM_THREADS; ++i) {
-        threads.emplace_back([&, i]() {
+        threads.emplace_back([&, i] {
             sync_point.arrive_and_wait();
             std::mt19937 rng(i + 200);
             std::uniform_int_distribution<int> size_dist(16, 256);
@@ -477,7 +477,7 @@ TEST_F(WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest, ConcurrentMixed
                     if (mem != WBE::MEM_NULL) {
                         active_mems[i].push_back(mem);
                         // Write pattern to verify memory integrity
-                        memset(pool.get(mem), static_cast<int>(i + j) & 0xFF, size);
+                        memset(pool.get(mem), (i + j) & 0xFF, size);
                     }
                 } else {
                     // Deallocate
@@ -528,7 +528,7 @@ TEST_F(WBEHeapAllocAtomicSharedMutexAlignedPoolImplicitListTest, ConcurrentStres
 
     threads.reserve(NUM_THREADS);
     for (int i = 0; i < NUM_THREADS; ++i) {
-        threads.emplace_back([&, i]() {
+        threads.emplace_back([&, i] {
             sync_point.arrive_and_wait();
             std::mt19937 rng(i + 300);
             std::uniform_int_distribution<int> size_dist(8, 64);
