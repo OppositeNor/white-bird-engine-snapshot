@@ -19,3 +19,39 @@
 [submodule "dependencies/wbe-utils-model-compiler"]
 	path = dependencies/wbe-utils-model-compiler
 	url = https://github.com/OppositeNor/wbe-utils-model-compiler.git
+[submodule "dependencies/stb"]
+	path = dependencies/stb
+	url = https://github.com/nothings/stb.git
+[submodule "dependencies/libpng"]
+	path = dependencies/libpng
+	url = https://github.com/pnggroup/libpng.git
+[submodule "dependencies/freetype"]
+	path = dependencies/freetype
+	url = https://gitlab.freedesktop.org/freetype/freetype.git
+[submodule "dependencies/entt"]
+	path = dependencies/entt
+	url = https://github.com/skypjack/entt.git
+[submodule "dependencies/assimp"]
+	path = dependencies/assimp
+	url = https://github.com/assimp/assimp.git
+[submodule "dependencies/KTX-Software"]
+	path = dependencies/KTX-Software
+	url = https://github.com/KhronosGroup/KTX-Software.git
+[submodule "dependencies/thread-pool"]
+	path = dependencies/thread-pool
+	url = https://github.com/bshoshany/thread-pool.git
+[submodule "dependencies/imgui"]
+	path = dependencies/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "dependencies/SDL2"]
+	path = dependencies/SDL2
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "dependencies/VulkanMemoryAllocator"]
+	path = dependencies/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "dependencies/slangpy"]
+	path = dependencies/slangpy
+	url = https://github.com/shader-slang/slangpy.git
+[submodule "dependencies/tl"]
+	path = dependencies/tl
+	url = https://github.com/teal-language/tl.git
