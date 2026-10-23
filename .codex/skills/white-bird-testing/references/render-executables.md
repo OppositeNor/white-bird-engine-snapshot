@@ -3,7 +3,7 @@
 
 ## Inspect current implementation
 
-Read the header-only shared utility in `tests/executable/function/render/render_test.hh`, the relevant test's `main()` and `render_update()`, and the capture contract in `include/function/render/i_renderer.hh`. Check `git diff` first for updated probes or user changes. Read `tests/executable/function/render/generate.json` only when adding, removing, or renaming a rendering executable. Do not assume old binaries or screenshots reflect current source.
+Read the header-only shared utility in `tests/executable/function/render/render_test.hh`, the relevant test's `main()` and `render_update()`, and the capture contract in `include/function/render/i_renderer.hh`. Check `git diff` first for updated probes or user changes. Read `tests/executable/function/render/generate.toml` only when adding, removing, or renaming a rendering executable. Do not assume old binaries or screenshots reflect current source.
 
 ## Shared test hooks
 
@@ -13,7 +13,7 @@ Every executable test that renders must:
 - Call `WBE::on_exec_test_render(renderer, current_frame)` from its render-thread `render_update()`, before any early return. Pass the renderer by reference and its monotonic frame counter, not the rotating frame slot or acquired swapchain image index. It reads the capture variables on every call and returns `true` when it requested a capture this frame (the deferred test hides its ImGui window on such frames).
 - Optionally call `WBE::on_exec_test_logic(window)` from the logic thread to support `WBE_EXEC_TEST_RESIZE`.
 
-`render_test.hh` is a header-only helper library; there is no `render_test.cpp` to link. Besides the hooks it provides mesh-resource and pipeline helpers, `alias_mesh_resources`, `alias_render_targets`, `connect_resource_chain`, camera and spot-light GPU structs, and descriptor debug output. Prefer a Teal recipe for new graphs (see the `white-bird-render-graph` skill); `vulkan_draw_cube_unshaded_test.cpp` is the minimal recipe-based executable. When adding a new rendering executable, add only that executable's source pattern to `tests/executable/function/render/generate.json`. Do not edit `executable_test.gen.cmake`.
+`render_test.hh` is a header-only helper library; there is no `render_test.cpp` to link. Besides the hooks it provides mesh-resource and pipeline helpers, `alias_mesh_resources`, `alias_render_targets`, `connect_resource_chain`, camera and spot-light GPU structs, and descriptor debug output. Prefer a Teal recipe for new graphs (see the `white-bird-render-graph` skill); `vulkan_draw_cube_unshaded_test.cpp` is the minimal recipe-based executable. When adding a new rendering executable, add only that executable's source pattern to `tests/executable/function/render/generate.toml`. Do not edit `executable_test.gen.cmake`.
 
 The shared test utility owns environment parsing and one-shot trigger state. Keep those policies out of the engine. Use `IRenderer::request_frame_capture()` for capture, never a hard-coded engine screenshot path or environment hook. Renderer access is render-thread confined; requests originating elsewhere must use `IRenderer::add_job()`.
 

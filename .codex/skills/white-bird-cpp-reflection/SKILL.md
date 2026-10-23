@@ -119,4 +119,4 @@ parser changes, add `:ParserJSONTest*:ParserTOMLTest*`. The wrapper runs the ful
 
 Read [references/system-and-extension.md](references/system-and-extension.md) before changing the metaparser, metadata
 cache, annotation categories, supported field types, inheritance, strict deserialization, enum reflection, Teal generation,
-templates, `generate.json`, labels, type UUIDs, factories, or the render-task registry.
+templates, `generate.toml`, labels, type UUIDs, factories, or the render-task registry.

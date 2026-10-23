@@ -1,6 +1,6 @@
 # White Bird Engine
 
-> A free game engine built for rhythm game development.
+> A free game engine.
 >
 > Licensed under [Apache License Version 2.0](https://github.com/OppositeNor/white-bird-engine/blob/main/LICENSE).
 

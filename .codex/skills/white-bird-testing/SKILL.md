@@ -109,7 +109,7 @@ tests/
 │   ├── function/           mostly one self-contained <subject>_test.cpp per subject
 │   ├── global/  platform/  resource/  utils_test/
 ├── benchmark/     -> wbe_benchmark_test (Google Benchmark, GLOB_RECURSE)
-├── executable/    -> wbe_render_test_<name> binaries, registered in function/render/generate.json
+├── executable/    -> wbe_render_test_<name> binaries, registered in function/render/generate.toml
 │                     (see references/render-executables.md)
 ├── shader/        -> pytest + slangpy tests of shader utility functions; kernels in shader/kernels/
 └── integration/   not currently wired into CMake; files here are NOT built or run
@@ -259,7 +259,7 @@ them but does not run them. You need them when:
 Read [references/render-executables.md](references/render-executables.md) before doing any of these. It covers:
 
 - the shared hooks in `tests/executable/function/render/render_test.hh`;
-- registering executables in `generate.json`;
+- registering executables in `generate.toml`;
 - `InputManagerMocked` and the `WBE_EXEC_TEST_INPUT_SEQUENCE` JSON format;
 - the capture environment variables;
 - clean `SIGTERM` shutdown;

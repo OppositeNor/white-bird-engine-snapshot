@@ -91,8 +91,10 @@ For non-trivial implementation tasks:
 
 ### Render Graph Recipes
 
-- A recipe is a Lua `script` resource whose module exports `build(context)` and returns a `RendGraphRecipeVK` table
-  (`imports`, `resources`, `tasks`; see `rend_graph_recipe_params_vk.hh`). `RendGraphScriptVK` runs it and
+- A recipe is a Teal `script` resource whose module exports `build(context)`. It creates a graph with
+  `Graph.new()` (`render_graph_utils.render_graph_utils`), declares resources as handles, adds tasks with the typed
+  constructors, and returns `graph:build()`, which emits the plain `RendGraphRecipeVK` table (`imports`, `resources`,
+  `tasks`; see `rend_graph_recipe_params_vk.hh`). `RendGraphScriptVK` runs it and
   `RendGraphRecipeBuilderVK` turns it into a `RendGraphDescVK`; recipes only build descriptors and never touch render objects.
 - `context` holds `RendGraphScriptVK::make_context()` facts (`RendRecipeContextVK`: `frames_in_flight`,
   `swap_chain_format`, `swap_chain_extent`). An application that adds entries declares a `WBE_REFLECT_SCRIPT` struct
@@ -100,12 +102,14 @@ For non-trivial implementation tasks:
   `RendGraphScriptVK::run()`. Size swap-chain-dependent resources and dispatches in Lua from `swap_chain_extent`.
 - For a recipe graph, the application's rebuild callback runs the script, builds the descriptor, and adds its C++ tasks.
   Never pass script keys to the graph.
-- Every resource owned outside the graph must be listed in `imports` and supplied through `RendGraphRecipeImportsVK`; a
+- Every resource owned outside the graph must be declared with `graph:import_resource()` and supplied through `RendGraphRecipeImportsVK`; a
   declared-but-missing or supplied-but-undeclared import is an error. Recipes cannot set initial data, so buffers that need
   it are application-owned imports, registered in the render database under their import name.
-- Each resource declares exactly one of `buffer`, `image`, `image_view`, or `sampler`. Tasks name a registered task type
-  and pass `params` to it; `aliases` map task-local ids to graph resources. Edges come only from each task's `connect`
-  entries (`{ to = <task id>, resource = <resource id> }`). An optional `trigger` wraps the task with `RTTriggeredVK`, and an
+- Each resource declares exactly one of `buffer`, `image`, `image_view`, or `sampler`; `graph:build()` emits only those
+  reachable from tasks. Tasks name a registered task type and pass `params` to it; aliases (`task:alias()`,
+  `color_target()`, `depth_target()`) map task-local ids to graph resources, and `uses` only keeps resources reachable.
+  Edges come only from explicit connections (`graph:chain()`, `task:connect()`, `connect_all()`, `inputs_from()`),
+  emitted as `connect` entries (`{ to = <task id>, resource = <resource id> }`). An optional `trigger` wraps the task with `RTTriggeredVK`, and an
   optional `toggle` (`{ event, enabled }`) wraps it with `RTToggleVK`, outside any trigger. Rebuilds re-run the recipe, so
   pass a toggle's current state through the context.
 - Task `pipeline` params are render-database keys; the application compiles those pipelines and keeps them alive.
@@ -123,8 +127,8 @@ For non-trivial implementation tasks:
   recorded frame, so later rebuilds create it inactive. Task state that must follow runtime input across rebuilds is a
   `toggle` whose event the application emits and whose current state it passes through the context.
 - A subgraph groups tasks, graph-owned resources, and internal edges under one id (`RendGraphDescVK::add_subgraph()`;
-  in a recipe, a task with a nested recipe in `subgraph` and its `ports` bound in `ports`, built with
-  `render_graph_utils.render_graph_utils.subgraph()`). It is flattened when it is added: its task and owned resource ids become
+  in a recipe, a child graph's `graph:as_subgraph(id, ports)`, which emits a task with a nested recipe in `subgraph` and
+  its `ports` bound in `ports`). It is flattened when it is added: its task and owned resource ids become
   `<id>.<name>`, and names inside it resolve to a port's bound resource, else its own resource, else the enclosing graph's
   (task resource maps carry this as an unvalidated scope). Imports stay graph-wide; the same resource imported again merges.
   Edges to and from the subgraph id resolve when the graph is built, from the tasks' accesses: an incoming edge on R
@@ -134,8 +138,8 @@ For non-trivial implementation tasks:
 - Use `full_memory_barrier` (`RTFullMemoryBarrierVK`) to order a frame's mutation of persistent state after the previous
   frame's consumers, and `run_graphics_pipeline_indirect` for non-mesh indexed indirect draws.
 - Tasks that need application objects (for example the ImGui overlay) are built in C++ and supplied with
-  `RendGraphRecipeImportsVK::add_task()`; the recipe lists each as `{ id = <task id>, import = true }` and wires it with
-  `connect` like any task. Imported tasks set no `type`, `params`, `aliases`, `trigger`, or `toggle`, and supplied and imported
+  `RendGraphRecipeImportsVK::add_task()`; the recipe references each with `graph:import_task(id)` (emitted as
+  `{ id = <task id>, import = true }`) and connects it like any task. Imported tasks set no `type`, `params`, `aliases`, `trigger`, or `toggle`, and supplied and imported
   tasks must match, like resource imports.
 - Recipes and their feature modules are Teal. `templates/teal_types.d.tl.jinja` generates the Teal declarations of the
   `WBE_REFLECT_SCRIPT` classes and enums (the `reflect_script` attribute group; such a class is also a static serializable
@@ -147,8 +151,9 @@ For non-trivial implementation tasks:
   declarations as types only (`local type wbe = require("wbe")`), and annotate `build(context: <context type>):
   wbe.RendGraphRecipeVK`. Enums serialize as their canonical names; compare `render_graph_utils.render_graph_utils.enum_name(value)` with the
   canonical upper-case name, which also accepts the lowercase aliases.
-  Type each task's `params` with its reflected struct (`local params: wbe.RTParamsRunComputePipelineVK = { ... }`), since
-  `RendRecipeTaskVK.params` is untyped. The generated repo-root `tlconfig.lua` points the Teal language server at the
+  The typed constructors check params against the generated `Graph.RTParams<Name>VK` interfaces; when adding a raw task
+  with `graph:add()`, type its `params` with the reflected struct (`local params: wbe.RTParamsRunComputePipelineVK = { ... }`),
+  since `RendRecipeTaskVK.params` is untyped. The generated repo-root `tlconfig.lua` points the Teal language server at the
   same paths for the last built target.
 - The typed graph constructors (`graph:compute()`, `graph:draw_mesh()`, ...) are generated into `render_graph_utils.render_graph_tasks`
   (`templates/teal_render_graph_tasks.tl.jinja`) from the task classes annotated `WBE_RENDER_TASK(<method>)`; each creates
@@ -420,7 +425,7 @@ Document contracts, ownership, threading, and errors; do not restate signatures.
   `WBE_SERIALIZATION_ALIASES(name, ...)`, each a name of letters, digits, and underscores.
 - Generated artifacts live in `*.gen.*` files; regenerated automatically each build. Do not edit by hand.
 - Templates for codegen live in `templates/*.jinja`.
-- `generate.json` supports `${name}` replacement in `output_name`, `template`, `out_dir`, and nested string values under `data`. Per-entry `params` override built-ins; built-ins include `build_target`, `build_dir`, `binary_dir`, `root_dir`, `include_dir`, and `source_dir`.
+- Each `[[generate]]` entry of a `generate.toml` supports `${name}` replacement in `output_name`, `template`, `out_dir`, and nested string values under `data`. Per-entry `params` override built-ins; built-ins include `build_target`, `build_dir`, `binary_dir`, `root_dir`, `include_dir`, and `source_dir`.
 
 ## Python Scripts
 

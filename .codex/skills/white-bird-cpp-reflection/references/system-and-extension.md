@@ -10,7 +10,7 @@
    fields, `WBE_REFLECT` methods (name, arguments, return type, static, const), annotated enums with enumerators, values,
    attributes, and aliases, labels, type spellings, and annotation strings (`metadata_types.py`).
 4. Metadata is ordered by include-dependency depth. `WBEReflector` checks label redefinition, enum qualified-name
-   redefinition, and label hash collisions, then renders every `generate.json` entry.
+   redefinition, and label hash collisions, then renders every `generate.toml` entry.
 5. Generated headers go to `include/per_target/<target>/generated/`, sources to `src/per_target/<target>/generated/`.
 
 `include/core/reflection/reflection_defs.hh` holds only the `WBE_META` / `WBE_LABEL` macros and optional helpers. Never write
@@ -35,7 +35,7 @@ its rendered content changes.
 | `WBE_STRICT_DESERIALIZATION` | strict_deserializations | strict `deserialize`; effective only with a static-serializable category |
 | `WBE_REFLECT_ENUM` / `WBE_REFLECT_ENUM_IGNORE` | reflected_enums | `EnumReflection<E>` and enum `SerializableSD` |
 | `WBE_REFLECT_SCRIPT` | reflect_script | Teal declaration plus SD/Access or `EnumReflection` |
-| `WBE_RENDER_TASK`, `WBE_RENDER_TASK(<method>)` | render_tasks | `render_task_registry.gen.cpp`; with a method, its recipe constructor in `build/<target>/teal/utils/render_graph_tasks.tl` |
+| `WBE_RENDER_TASK`, `WBE_RENDER_TASK(<method>)` | render_tasks | `render_task_registry.gen.cpp`; with a method, its recipe constructor in `build/<target>/teal/render_graph_utils/render_graph_tasks.tl` |
 | `WBE_CLA_CONFIGURATION` | cla_configurations | `CLAConfiguration<T>` |
 | `WBE_LABEL(name, CATEGORY)` | static/dynamic labels | `LabelName<hash>`, `LabelManager` |
 | any annotated class | — | `TypeUUID<T>`, `TypeUUIDManager` (enums excluded) |
@@ -55,14 +55,14 @@ globally unique. The alias parser accepts a comma-separated list of names of let
 
 ## Generated outputs
 
-Every `generate.json` in the repo is used (except under `.cache`, `.git`, `.github`, `__pycache__`, `build`). Entries take
-`out_dir` (empty means the json's own directory), `output_name`, `template`, `data`, and optional `params`. `${name}` resolves
+Every `generate.toml` in the repo is used (except under `.cache`, `.git`, `.github`, `__pycache__`, `build`). Its `[[generate]]` entries take
+`out_dir` (empty means the manifest's own directory), `output_name`, `template`, `data`, and optional `params`. `${name}` resolves
 from the entry's `params`, then built-ins (`build_target`, `build_dir`, `binary_dir`, `root_dir`, `include_dir`,
 `source_dir`), then environment variables; an unresolved name is an error. A `data` string value starting with `.` is
 replaced by the reflection attribute named by its data **key** (the `gen_info` lists plus `metadata`); keys starting with
 `_` are rejected.
 
-| Output | Template | generate.json |
+| Output | Template | generate.toml |
 | --- | --- | --- |
 | `serializables_sd.gen.hh` | `serializables_sd.hh.jinja` | `include/per_target/` |
 | `enum_reflection.gen.hh` | `enum_reflection.hh.jinja` | `include/per_target/` |
@@ -141,7 +141,7 @@ Test round trips, missing values, type mismatches, nested usage, and strictness.
 ### A category or consumer
 
 Add the category to the right `gen_info` set and template conditions; extend the metaparser only for structured parameters
-or different AST extraction. For a new consumer, add a focused Jinja template and a `generate.json` entry, reuse existing
+or different AST extraction. For a new consumer, add a focused Jinja template and a `generate.toml` entry, reuse existing
 metadata, keep generated includes sufficient for every emitted type spelling, and let `code_gen.py` manage writes.
 
 ## Examples and tests

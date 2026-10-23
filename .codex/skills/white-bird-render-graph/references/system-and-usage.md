@@ -133,28 +133,29 @@ a graphics task through edges (skipped when the graph has no graphics task).
 
 ## Built-in task types
 
-All in `include/function/render_vk/`. Registered types are usable from recipes by alias.
+All in `include/function/render_vk/`. Registered types are usable from recipes by their recipe type name.
 
-| Class | Recipe type | Purpose |
-| --- | --- | --- |
-| `RTRunComputePipelineVK` | `run_compute_pipeline` | One compute dispatch; queue configurable, default graphics |
-| `RTRunComputePipelineIndirectVK` | `run_compute_pipeline_indirect` | Dispatch with counts read from a buffer |
-| `RTRunComputePipelinesSequentialVK` | `run_compute_pipelines_sequential` | Ordered compute passes in one command buffer |
-| `RTPingPongVK` | `ping_pong` | Alternates two compute pipelines for N iterations |
-| `RTMaxDownsampleVK` | `max_downsample` | Mip chain by 2x2 max, one view per mip |
-| `RTRunGraphicsPipelineVK` | `run_graphics_pipeline` | One graphics pipeline draw (`Builder`) |
-| `RTRunGraphicsPipelineIndirectVK` | `run_graphics_pipeline_indirect` | Indexed indirect draws for non-mesh geometry |
-| `RTGraphicsDrawMeshVK` | `graphics_draw_mesh` | Draws parts of a compiled mesh; imports and aliases it |
-| `RTGenerateMipmapsVK` | `generate_mipmaps` | Color mip chain with filtered blits |
-| `RTFullMemoryBarrierVK` | `full_memory_barrier` | Orders a frame's persistent-state mutation after the previous frame's consumers |
-| `RTCPUInFlightAcquireVK` | `cpu_acquire_image` | Async image readback, emitted through `EventManager` |
-| `RTCPUInFlightBufferAcquireVK` | `cpu_acquire_buffer` | Async buffer readback, emitted through `EventManager` |
-| `RTRunGraphicsPipelinesSequentialVK` | — | Ordered graphics passes in one command buffer |
-| `RTBuildAccelerationStructuresVK` | — | Records a prepared acceleration-structure build |
-| `RTTriggeredVK` | recipe `trigger` | Records its child on triggered or enabled frames |
-| `RTToggleVK` | recipe `toggle` | Records its child while enabled |
+| Class | Recipe type | Constructor | Purpose |
+| --- | --- | --- | --- |
+| `RTRunComputePipelineVK` | `run_compute_pipeline` | `:compute` | One compute dispatch; queue configurable, default graphics |
+| `RTRunComputePipelineIndirectVK` | `run_compute_pipeline_indirect` | `:compute_indirect` | Dispatch with counts read from a buffer |
+| `RTRunComputePipelinesSequentialVK` | `run_compute_pipelines_sequential` | `:compute_sequential` | Ordered compute passes in one command buffer |
+| `RTPingPongVK` | `ping_pong` | `:ping_pong` | Alternates two compute pipelines for N iterations |
+| `RTMaxDownsampleVK` | `max_downsample` | — | Mip chain by 2x2 max, one view per mip |
+| `RTRunGraphicsPipelineVK` | `run_graphics_pipeline` | `:draw` | One graphics pipeline draw (`Builder`) |
+| `RTRunGraphicsPipelineIndirectVK` | `run_graphics_pipeline_indirect` | `:draw_indirect` | Indexed indirect draws for non-mesh geometry |
+| `RTGraphicsDrawMeshVK` | `graphics_draw_mesh` | `:draw_mesh` | Draws parts of a compiled mesh; imports and aliases it |
+| `RTGenerateMipmapsVK` | `generate_mipmaps` | `:generate_mipmaps` | Color mip chain with filtered blits |
+| `RTFullMemoryBarrierVK` | `full_memory_barrier` | `:full_memory_barrier` | Orders a frame's persistent-state mutation after the previous frame's consumers |
+| `RTCPUInFlightAcquireVK` | `cpu_acquire_image` | `:cpu_acquire_image` | Async image readback, emitted through `EventManager` |
+| `RTCPUInFlightBufferAcquireVK` | `cpu_acquire_buffer` | — | Async buffer readback, emitted through `EventManager` |
+| `RTRunGraphicsPipelinesSequentialVK` | — | — | Ordered graphics passes in one command buffer |
+| `RTBuildAccelerationStructuresVK` | — | — | Records a prepared acceleration-structure build |
+| `RTTriggeredVK` | task `trigger` option | — | Records its child on triggered or enabled frames |
+| `RTToggleVK` | task `toggle` option | — | Records its child while enabled |
 
-Compute tasks default to `GRAPHICS`. Graphics tasks always run on graphics. Prefer an existing type before adding one.
+Types without a constructor are added with `graph:add({ id, type, params })`. Compute tasks default to `GRAPHICS`; graphics
+tasks always run on graphics. Prefer an existing type before adding one.
 
 ## Debug output
 
