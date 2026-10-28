@@ -42,11 +42,6 @@ enum class WBE_META(WBE_REFLECT_SCRIPT) SVORecipeVariant : uint8_t {
  */
 struct WBE_META(WBE_REFLECT_SCRIPT) SVOBufferSizes {
     /**
-     * @brief svo_dynamic_nodes.
-     */
-    WBE_META(WBE_REFLECT)
-    uint64_t dynamic_nodes = 0;
-    /**
      * @brief Each of svo_deferred_list_ping and svo_deferred_list_pong.
      */
     WBE_META(WBE_REFLECT)

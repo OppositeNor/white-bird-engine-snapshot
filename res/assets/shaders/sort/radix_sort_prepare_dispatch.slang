@@ -18,12 +18,13 @@
 struct DescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "input_buffer", "read")] uint2 input_buffer;
     [WBE_DESCRIPTOR("storage_buffer", "dispatch_buffer", "write")] uint2 dispatch_buffer;
+    [WBE_PUSH_CONSTANT("frame_slot")] uint shader_debug_frame_slot;
 };
 
 [vk::push_constant]
 ConstantBuffer<DescriptorIndices> descriptor_indices;
 
-// Writes the indirect dispatches of a radix sort from the local sort count in the metadata of the key buffer: the local
+// Writes the indirect dispatches of a radix sort from the local sort count in the header of the key buffer: the local
 // sort dispatch, with one workgroup per local sort, at WBE_RADIX_SORT_LOCAL_SORT_DISPATCH_START, and the histogram prefix
 // scan dispatch, with one workgroup per WBE_RADIX_SORT_SCAN_HISTOGRAM_NUM local sorts, at
 // WBE_RADIX_SORT_HISTOGRAM_SCAN_DISPATCH_START. The element count does not change between the passes, so every pass uses the
@@ -31,9 +32,10 @@ ConstantBuffer<DescriptorIndices> descriptor_indices;
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void main() {
-    RWStructuredBuffer<uint> input_buffer = ResourceDescriptorHeap[descriptor_indices.input_buffer.x];
+    CountedBuffer<uint> keys =
+        CountedBuffer<uint>(descriptor_indices.input_buffer, descriptor_indices.shader_debug_frame_slot);
     RWStructuredBuffer<uint> dispatch_buffer = ResourceDescriptorHeap[descriptor_indices.dispatch_buffer.x];
-    uint local_sort_num = input_buffer[WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX];
+    uint local_sort_num = keys.get_header(WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX);
     dispatch_buffer[WBE_RADIX_SORT_LOCAL_SORT_DISPATCH_START + 0] = local_sort_num;
     dispatch_buffer[WBE_RADIX_SORT_LOCAL_SORT_DISPATCH_START + 1] = 1;
     dispatch_buffer[WBE_RADIX_SORT_LOCAL_SORT_DISPATCH_START + 2] = 1;

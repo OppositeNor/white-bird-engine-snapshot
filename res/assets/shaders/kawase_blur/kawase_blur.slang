@@ -20,7 +20,7 @@
  * @brief General compute pass that writes one Kawase blur iteration between two ping-pong images.
  * @details The logical resources are placeholders; alias them to graph resources with RendTaskDescVK::alias(). The default
  * variant samples kawase_blur_ping and writes kawase_blur_pong; defining WBE_KAWASE_BLUR_WRITE_PING swaps them, so a
- * multi-iteration blur alternates the two variants in one ping-pong task. The dispatch covers the destination in 8x8
+ * multi-iteration blur alternates the two variants in one ping-pong task. The dispatch covers the destination in 16x16
  * workgroups, and the source is sampled with normalized coordinates, so the two images may differ in extent. Define
  * WBE_KAWASE_BLUR_OFFSET to select the tap offset in source texels.
  */
@@ -46,11 +46,11 @@ struct KawaseBlurDescriptorIndices {
     [WBE_DESCRIPTOR("sampler", "kawase_blur_sampler")] uint2 blur_sampler;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<KawaseBlurDescriptorIndices> descriptor_indices;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThreadID) {
     Texture2D<float4> source = ResourceDescriptorHeap[descriptor_indices.source.x];
     RWTexture2D<float4> destination = ResourceDescriptorHeap[descriptor_indices.destination.x];
@@ -58,7 +58,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
     uint destination_width;
     uint destination_height;
     destination.GetDimensions(destination_width, destination_height);
-    uint2 dispatch_thread_id = z_order_swizzle_8x8(p_group_id.xy, p_group_thread_id.xy);
+    uint2 dispatch_thread_id = z_order_swizzle_16x16(p_group_id.xy, p_group_thread_id.xy);
     if (dispatch_thread_id.x >= destination_width || dispatch_thread_id.y >= destination_height) {
         return;
     }

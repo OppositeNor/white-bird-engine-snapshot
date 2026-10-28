@@ -24,6 +24,7 @@
 #include "function/scene/scene_resource_unit.hh"
 #include "function/scene/scene_resource_unit_loader.hh"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/packing.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include "glm/ext/vector_int2.hpp"
 #include "glm/ext/vector_int3.hpp"
@@ -48,9 +49,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <functional>
 #include "core/script/sb_lua.hh"
 #include <gtest/gtest.h>
+#include <ktx.h>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -333,6 +336,87 @@ protected:
         scheme.type = "skeleton";
         scheme.joints = {.binary_id = "loaded_skeleton_joints", .start = p_start, .size = p_size};
         return scheme;
+    }
+
+    // KTX 2 stores Vulkan format values.
+    static constexpr uint32_t KTX_VK_FORMAT_R16_SFLOAT = 76;
+    static constexpr uint32_t KTX_VK_FORMAT_R32_SFLOAT = 100;
+
+    // Write a KTX 2 texture whose texel (x, y, z) holds x + 10y + 100z as an R16 or R32 float, and return its path.
+    static WBE::Path write_sdf_texture(
+        std::string_view p_name, const glm::uvec3& p_extent, uint32_t p_vk_format, uint32_t p_dimension_count = 3) {
+        ktxTextureCreateInfo create_info{};
+        create_info.vkFormat = p_vk_format;
+        create_info.baseWidth = p_extent.x;
+        create_info.baseHeight = p_extent.y;
+        create_info.baseDepth = p_extent.z;
+        create_info.numDimensions = p_dimension_count;
+        create_info.numLevels = 1;
+        create_info.numLayers = 1;
+        create_info.numFaces = 1;
+        ktxTexture2* texture = nullptr;
+        EXPECT_EQ(ktxTexture2_Create(&create_info, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture), KTX_SUCCESS);
+        for (uint32_t z = 0; z < p_extent.z; ++z) {
+            std::vector<char> slice;
+            for (uint32_t y = 0; y < p_extent.y; ++y) {
+                for (uint32_t x = 0; x < p_extent.x; ++x) {
+                    const float value = static_cast<float>(x + (10 * y) + (100 * z));
+                    const uint16_t half_value = glm::packHalf1x16(value);
+                    const char* texel = p_vk_format == KTX_VK_FORMAT_R16_SFLOAT ? reinterpret_cast<const char*>(&half_value)
+                                                                                 : reinterpret_cast<const char*>(&value);
+                    const size_t texel_size = p_vk_format == KTX_VK_FORMAT_R16_SFLOAT ? sizeof(half_value) : sizeof(value);
+                    slice.insert(slice.end(), texel, texel + texel_size);
+                }
+            }
+            EXPECT_EQ(ktxTexture_SetImageFromMemory(
+                          ktxTexture(texture), 0, 0, z, reinterpret_cast<const ktx_uint8_t*>(slice.data()), slice.size()),
+                KTX_SUCCESS);
+        }
+        const WBE::Path path = std::filesystem::temp_directory_path() / p_name;
+        EXPECT_EQ(ktxTexture2_WriteToNamedFile(texture, path.string().c_str()), KTX_SUCCESS);
+        ktxTexture2_Destroy(texture);
+        return path;
+    }
+
+    // Load a texture in place; the caller destroys it with std::destroy_at.
+    static WBE::RefRes<WBE::RUTexture> push_test_texture(WBE::StackAllocator& p_stack_allocator, const WBE::Path& p_path) {
+        WBE::MemID mem_id = p_stack_allocator.allocate(sizeof(WBE::RUTexture));
+        std::construct_at(static_cast<WBE::RUTexture*>(p_stack_allocator.get(mem_id)), p_path.string());
+        return WBE::RefRes<WBE::RUTexture>(mem_id, &p_stack_allocator);
+    }
+
+    static WBE::RUSchemaSDF make_sdf_scheme() {
+        WBE::RUSchemaSDF scheme;
+        scheme.id = "loaded_sdf";
+        scheme.type = "sdf";
+        scheme.data_structure = WBE::RUSDFDataStructure::TEXTURE_3D;
+        scheme.texture_id = "loaded_sdf_texture";
+        scheme.aabb = {.center = {0.0F, 0.0F, 0.0F}, .width = 1.0F, .height = 1.0F, .depth = 1.0F};
+        return scheme;
+    }
+
+    // Load an SDF scheme whose texture_id resolves to p_texture.
+    WBE::RefRes<WBE::RUSDF> load_test_sdf(
+        WBE::StackAllocator& p_stack_allocator, const WBE::RUSchemaSDF& p_scheme, WBE::RefRes<WBE::RUTexture> p_texture) {
+        std::stringstream stream;
+        WBE::RefRes<WBE::RUSDF> captured_sdf = WBE::MEM_NULL;
+        auto resource_chunk =
+            MockResourceChunk::Builder()
+                .set_reserve_res_unit_storage_callback(
+                    [&p_stack_allocator, &captured_sdf](std::string_view, size_t p_size) -> WBE::RefRes<char> {
+                        WBE::RefRes<char> resource(p_stack_allocator.allocate(p_size), &p_stack_allocator);
+                        captured_sdf = resource.force_cast<WBE::RUSDF>();
+                        return resource;
+                    })
+                .set_create_ref_to_callback([&p_texture](std::function<void(WBE::RefRes<char>)> p_assign_ref, std::string_view p_key) {
+                    if (p_key == "loaded_sdf_texture") {
+                        p_assign_ref(p_texture.force_cast<char>());
+                    }
+                })
+                .build(stream);
+        WBE::ResourceUnitLoaderSDF loader;
+        loader.populate_scheme(*resource_chunk, p_scheme);
+        return captured_sdf;
     }
 
     std::unique_ptr<MockResourceChunk> create_static_mesh_test_chunk(
@@ -1269,6 +1353,7 @@ TEST_F(ResourcePopulatorTest, MeshWithoutSkeletonHasNoSkeletonOrJointBindings) {
 
     ASSERT_NE(captured_mesh, nullptr);
     EXPECT_EQ(captured_mesh->skeleton, nullptr);
+    EXPECT_EQ(captured_mesh->sdf, nullptr);
     EXPECT_EQ(captured_mesh->opaque_instances.submeshes.get()[0].vertex_binding_count, 1U);
 }
 
@@ -1315,6 +1400,170 @@ TEST_F(ResourcePopulatorTest, MeshRejectsInvalidSkeletonBindings) {
     duplicated_position.stride = JOINT_BINDING_STRIDE + sizeof(float) * 3;
     duplicated_position.binary.size = duplicated_position.stride * 3;
     expect_invalid("loaded_skeleton", duplicated_position);
+}
+
+TEST_F(ResourcePopulatorTest, SDFLoadsTextureReference) {
+    WBE::StackAllocator stack_allocator(8192);
+    std::stringstream stream;
+    WBE::RefRes<WBE::RUSDF> captured_sdf = WBE::MEM_NULL;
+    std::vector<std::string> created_ref_keys;
+    const glm::uvec3 extent(4U, 3U, 2U);
+    WBE::RefRes<WBE::RUTexture> stored_texture =
+        push_test_texture(stack_allocator, write_sdf_texture("wbe_sdf_loads_texture.ktx2", extent, KTX_VK_FORMAT_R16_SFLOAT));
+    auto resource_chunk =
+        MockResourceChunk::Builder()
+            .set_reserve_res_unit_storage_callback(
+                [&stack_allocator, &captured_sdf](std::string_view p_id, size_t p_size) -> WBE::RefRes<char> {
+                    WBE::MemID mem_id = stack_allocator.allocate(p_size);
+                    WBE::RefRes<char> resource(mem_id, &stack_allocator);
+                    if (p_id == "loaded_sdf") {
+                        captured_sdf = resource.force_cast<WBE::RUSDF>();
+                    }
+                    return resource;
+                })
+            .set_create_ref_to_callback(
+                [&created_ref_keys, &stored_texture](std::function<void(WBE::RefRes<char>)> p_assign_ref, std::string_view p_key) {
+                    created_ref_keys.emplace_back(p_key);
+                    if (p_key == "loaded_sdf_texture") {
+                        p_assign_ref(stored_texture.force_cast<char>());
+                    }
+                })
+            .build(stream);
+    constexpr std::string_view JSON_BUFFER = R"(
+    {
+        "id": "loaded_sdf",
+        "type": "sdf",
+        "data_structure": "texture_3d",
+        "texture_id": "loaded_sdf_texture",
+        "aabb": {"center": [1.0, -2.0, 0.5], "width": 2.0, "height": 1.5, "depth": 1.0}
+    }
+    )";
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(JSON_BUFFER);
+    WBE::ResourceUnitLoaderSDF loader;
+
+    loader.populate_scheme_from_data(*resource_chunk, parser.get_data());
+
+    ASSERT_NE(captured_sdf, nullptr);
+    EXPECT_EQ(created_ref_keys, std::vector<std::string>{"loaded_sdf_texture"});
+    EXPECT_EQ(captured_sdf->data_structure, WBE::RUSDFDataStructure::TEXTURE_3D);
+    EXPECT_EQ(captured_sdf->texture, stored_texture);
+    EXPECT_EQ(captured_sdf->aabb.center, glm::vec3(1.0F, -2.0F, 0.5F));
+    EXPECT_FLOAT_EQ(captured_sdf->aabb.width, 2.0F);
+    EXPECT_FLOAT_EQ(captured_sdf->aabb.height, 1.5F);
+    EXPECT_FLOAT_EQ(captured_sdf->aabb.depth, 1.0F);
+    EXPECT_EQ(captured_sdf->get_extent(), extent);
+    EXPECT_FLOAT_EQ(captured_sdf->get_sample(glm::uvec3(0U, 0U, 0U)), 0.0F);
+    EXPECT_FLOAT_EQ(captured_sdf->get_sample(glm::uvec3(3U, 0U, 0U)), 3.0F);
+    EXPECT_FLOAT_EQ(captured_sdf->get_sample(glm::uvec3(1U, 2U, 0U)), 21.0F);
+    EXPECT_FLOAT_EQ(captured_sdf->get_sample(glm::uvec3(2U, 1U, 1U)), 112.0F);
+    EXPECT_FLOAT_EQ(captured_sdf->get_sample(glm::uvec3(3U, 2U, 1U)), 123.0F);
+    EXPECT_THROW(captured_sdf->get_sample(glm::uvec3(4U, 0U, 0U)), std::runtime_error);
+    EXPECT_THROW(captured_sdf->get_sample(glm::uvec3(0U, 3U, 0U)), std::runtime_error);
+    EXPECT_THROW(captured_sdf->get_sample(glm::uvec3(0U, 0U, 2U)), std::runtime_error);
+    std::destroy_at(stored_texture.get());
+}
+
+TEST_F(ResourcePopulatorTest, SDFRejectsInvalidSchemes) {
+    WBE::ResourceUnitLoaderSDF loader;
+    auto expect_invalid = [&loader](const WBE::RUSchemaSDF& p_scheme) {
+        WBE::StackAllocator stack_allocator(8192);
+        std::stringstream stream;
+        auto resource_chunk = MockResourceChunk::Builder()
+                                  .set_reserve_res_unit_storage_callback([&stack_allocator](std::string_view, size_t p_size) {
+                                      return WBE::RefRes<char>(stack_allocator.allocate(p_size), &stack_allocator);
+                                  })
+                                  .build(stream);
+        EXPECT_THROW(loader.populate_scheme(*resource_chunk, p_scheme), std::runtime_error);
+    };
+
+    WBE::RUSchemaSDF missing_texture = make_sdf_scheme();
+    missing_texture.texture_id.clear();
+    expect_invalid(missing_texture);
+    WBE::RUSchemaSDF nul_texture = make_sdf_scheme();
+    nul_texture.texture_id = std::string("loaded\0texture", 14);
+    expect_invalid(nul_texture);
+    WBE::RUSchemaSDF invalid_center = make_sdf_scheme();
+    invalid_center.aabb.center = {0.0F, 0.0F};
+    expect_invalid(invalid_center);
+}
+
+TEST_F(ResourcePopulatorTest, SDFRejectsInvalidTextures) {
+    WBE::StackAllocator stack_allocator(8192);
+
+    WBE::RefRes<WBE::RUSDF> unresolved_sdf = load_test_sdf(stack_allocator, make_sdf_scheme(), WBE::MEM_NULL);
+    ASSERT_NE(unresolved_sdf, nullptr);
+    EXPECT_THROW((void)unresolved_sdf->get_extent(), std::runtime_error);
+    EXPECT_THROW((void)unresolved_sdf->get_sample(glm::uvec3(0U)), std::runtime_error);
+
+    WBE::RefRes<WBE::RUTexture> flat_texture = push_test_texture(stack_allocator,
+        write_sdf_texture("wbe_sdf_rejects_flat_texture.ktx2", glm::uvec3(2U, 2U, 1U), KTX_VK_FORMAT_R16_SFLOAT, 2));
+    WBE::RefRes<WBE::RUSDF> flat_sdf = load_test_sdf(stack_allocator, make_sdf_scheme(), flat_texture);
+    ASSERT_NE(flat_sdf, nullptr);
+    EXPECT_THROW((void)flat_sdf->get_extent(), std::runtime_error);
+    std::destroy_at(flat_texture.get());
+
+    WBE::RefRes<WBE::RUTexture> float_texture = push_test_texture(
+        stack_allocator, write_sdf_texture("wbe_sdf_rejects_float_texture.ktx2", glm::uvec3(2U), KTX_VK_FORMAT_R32_SFLOAT));
+    WBE::RefRes<WBE::RUSDF> float_sdf = load_test_sdf(stack_allocator, make_sdf_scheme(), float_texture);
+    ASSERT_NE(float_sdf, nullptr);
+    EXPECT_THROW((void)float_sdf->get_sample(glm::uvec3(0U)), std::runtime_error);
+    std::destroy_at(float_texture.get());
+}
+
+TEST_F(ResourcePopulatorTest, MeshLoadsSDFReference) {
+    WBE::StackAllocator stack_allocator(8192);
+    std::stringstream stream;
+    WBE::RefRes<WBE::RUMesh3D> captured_mesh = WBE::MEM_NULL;
+    std::vector<std::string> created_ref_keys;
+    WBE::RefRes<WBE::RUSDF> stored_sdf = push_test_object(stack_allocator, WBE::RUSDF{});
+    auto resource_chunk =
+        MockResourceChunk::Builder()
+            .set_push_data_callback([&stack_allocator](size_t p_size, const void* p_data) -> WBE::RefRes<char> {
+                WBE::MemID mem_id = stack_allocator.allocate(p_size);
+                std::memcpy(stack_allocator.get(mem_id), p_data, p_size);
+                return WBE::RefRes<char>(mem_id, &stack_allocator);
+            })
+            .set_reserve_res_unit_storage_callback(
+                [&stack_allocator, &captured_mesh](std::string_view p_id, size_t p_size) -> WBE::RefRes<char> {
+                    WBE::MemID mem_id = stack_allocator.allocate(p_size);
+                    WBE::RefRes<char> resource(mem_id, &stack_allocator);
+                    if (p_id == "loaded_mesh") {
+                        captured_mesh = resource.force_cast<WBE::RUMesh3D>();
+                    }
+                    return resource;
+                })
+            .set_create_ref_to_callback(
+                [&created_ref_keys, &stored_sdf](std::function<void(WBE::RefRes<char>)> p_assign_ref, std::string_view p_key) {
+                    created_ref_keys.emplace_back(p_key);
+                    if (p_key == "loaded_mesh.sdf") {
+                        p_assign_ref(stored_sdf.force_cast<char>());
+                    }
+                })
+            .build(stream);
+    WBE::RUSchemaMesh3D scheme = make_single_submesh_mesh_scheme(make_triangle_submesh_scheme());
+    scheme.sdf_id = "loaded_mesh.sdf";
+    WBE::ResourceUnitLoaderMesh loader;
+
+    loader.populate_scheme(*resource_chunk, scheme);
+
+    ASSERT_NE(captured_mesh, nullptr);
+    EXPECT_EQ(captured_mesh->sdf, stored_sdf);
+    EXPECT_EQ(captured_mesh->skeleton, nullptr);
+    EXPECT_EQ(std::ranges::count(created_ref_keys, "loaded_mesh.sdf"), 1);
+}
+
+TEST_F(ResourcePopulatorTest, MeshRejectsInvalidSDFId) {
+    WBE::ResourceUnitLoaderMesh loader;
+    for (const std::string& sdf_id : {std::string(), std::string("loaded\0sdf", 10)}) {
+        WBE::StackAllocator stack_allocator(8192);
+        std::stringstream stream;
+        WBE::RefRes<WBE::RUMesh3D> captured_mesh = WBE::MEM_NULL;
+        auto resource_chunk = create_submesh_test_chunk(stack_allocator, stream, captured_mesh);
+        WBE::RUSchemaMesh3D scheme = make_single_submesh_mesh_scheme(make_triangle_submesh_scheme());
+        scheme.sdf_id = sdf_id;
+        EXPECT_THROW(loader.populate_scheme(*resource_chunk, scheme), std::runtime_error);
+    }
 }
 
 TEST_F(ResourcePopulatorTest, MeshRejectsSubmeshWithoutVertexBindings) {
@@ -1854,6 +2103,43 @@ TEST_F(ResourcePopulatorTest, MaterialResourceGeneral) {
     ASSERT_EQ(created_ref_keys.size(), 2U);
     EXPECT_EQ(created_ref_keys[0], "normal_texture");
     EXPECT_EQ(created_ref_keys[1], "normal_texture");
+    EXPECT_EQ(captured_material->pipeline_variant, nullptr);
+    EXPECT_EQ(captured_material->get_pipeline_variant(), WBE::MATERIAL_PIPELINE_VARIANT_DEFAULT);
+}
+
+TEST_F(ResourcePopulatorTest, MaterialPipelineVariant) {
+    WBE::ResourceUnitLoaderMaterial loader;
+    WBE::StackAllocator stack_allocator(64 * 1024);
+    std::stringstream stream;
+    WBE::RefRes<WBE::RUMaterial> captured_material;
+
+    auto push_to_stack = [&stack_allocator](size_t p_res_size, const void* p_res) -> WBE::RefRes<char> {
+        WBE::MemID mem_id = stack_allocator.allocate(p_res_size);
+        std::memcpy(stack_allocator.get(mem_id), p_res, p_res_size);
+        return WBE::RefRes<char>(mem_id, &stack_allocator);
+    };
+
+    auto res_chunk = MockResourceChunk::Builder()
+                         .set_push_data_callback(std::function<WBE::RefRes<char>(size_t, const void*)>(push_to_stack))
+                         .set_reserve_res_unit_storage_callback(std::function<WBE::RefRes<char>(std::string_view, size_t)>(
+                             [&captured_material, &stack_allocator](std::string_view, size_t p_size) -> WBE::RefRes<char> {
+                                 WBE::MemID mem_id = stack_allocator.allocate(p_size);
+                                 WBE::RefRes<char> saved_resource(mem_id, &stack_allocator);
+                                 captured_material = saved_resource.force_cast<WBE::RUMaterial>();
+                                 return saved_resource;
+                             }))
+                         .build(stream);
+
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(R"({"id": "tinted_material", "type": "material", "textures": [], "pipeline_variant": "tinted"})");
+    loader.populate_scheme_from_data(*res_chunk, parser.get_data());
+    ASSERT_NE(captured_material, nullptr);
+    EXPECT_STREQ(captured_material->pipeline_variant.get(), "tinted");
+    EXPECT_EQ(captured_material->get_pipeline_variant(), "tinted");
+
+    WBE::ParserJSON empty_parser;
+    empty_parser.parse_from_buffer(R"({"id": "empty_variant_material", "type": "material", "textures": [], "pipeline_variant": ""})");
+    EXPECT_THROW(loader.populate_scheme_from_data(*res_chunk, empty_parser.get_data()), std::runtime_error);
 }
 
 TEST_F(ResourcePopulatorTest, GraphicsPipelineResourceGeneral) {

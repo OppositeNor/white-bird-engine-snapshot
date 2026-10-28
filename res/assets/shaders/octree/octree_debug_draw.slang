@@ -67,7 +67,7 @@ struct OctreeDebugDrawVertexOutput {
     float4 color : COLOR0;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<OctreeDebugDrawDescriptorIndices> descriptor_indices;
 
 /**
@@ -105,9 +105,10 @@ OctreeDebugDrawVertexOutput vertex_main(uint p_vertex_id : SV_VulkanVertexID, ui
         color = float4(1.0, 0.0, 0.0, 1.0);
     }
 #endif
-    float4 view_position = mul(camera_info.view, float4(world_position, 1.0));
+    float4 view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.view), float4(world_position, 1.0));
     OctreeDebugDrawVertexOutput output;
-    output.position = mul(camera_info.proj, view_position);
+    output.position = software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.proj), view_position);
     output.color = color;
     return output;
 }

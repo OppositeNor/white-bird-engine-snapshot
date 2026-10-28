@@ -16,7 +16,6 @@
 #define WBE_FILE_RENDER_VK_RESOURCE_UNIT_LOADER_HH
 
 #include "core/data/data_value.hh"
-#include "core/parser/parser_json.hh"
 #include "resource/resource_chunk/i_resource_chunk.hh"
 #include "resource/resource_unit/resource_unit.hh"
 #include "resource/resource_unit_loader/resource_unit_loader.hh"
@@ -31,8 +30,6 @@ class ResourceUnitLoaderShader final : public IResourceUnitLoader {
 public:
     virtual std::span<const std::string> get_supported_resource_types() const override;
     virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
-
-protected:
     virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
 };
 
@@ -41,8 +38,6 @@ class ResourceUnitLoaderGraphicsPipeline final : public IResourceUnitLoader {
 public:
     virtual std::span<const std::string> get_supported_resource_types() const override;
     virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
-
-protected:
     virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
 };
 
@@ -60,8 +55,6 @@ public:
      * @brief Deserialize and populate a ray-tracing pipeline resource.
      */
     virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
-
-protected:
     virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
 };
 
@@ -70,8 +63,6 @@ class ResourceUnitLoaderMaterial final : public IResourceUnitLoader {
 public:
     virtual std::span<const std::string> get_supported_resource_types() const override;
     virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
-
-protected:
     virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
 };
 
@@ -79,8 +70,6 @@ class ResourceUnitLoaderMesh final : public IResourceUnitLoader {
 public:
     virtual std::span<const std::string> get_supported_resource_types() const override;
     virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
-
-protected:
     virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
 };
 
@@ -93,10 +82,26 @@ public:
     virtual std::span<const std::string> get_supported_resource_types() const override;
     virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
 
-protected:
     /**
      * @throws std::runtime_error When the joints binary_id is empty or contains NUL, or the joint byte range is empty, is
      * not a multiple of RUSkeleton::JOINT_BYTE_SIZE, or holds more joints than the int32 index range.
+     */
+    virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
+};
+
+/**
+ * @class ResourceUnitLoaderSDF
+ * @brief Loads signed distance fields whose samples are a referenced texture resource.
+ *
+ * The texture's layout is checked when RUSDF reads it, since references resolve after the resource chunk loads.
+ */
+class ResourceUnitLoaderSDF final : public IResourceUnitLoader {
+public:
+    virtual std::span<const std::string> get_supported_resource_types() const override;
+    virtual void populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const override;
+
+    /**
+     * @throws std::runtime_error When texture_id is empty or contains NUL, or the aabb center does not hold 3 values.
      */
     virtual std::any populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const override;
 };

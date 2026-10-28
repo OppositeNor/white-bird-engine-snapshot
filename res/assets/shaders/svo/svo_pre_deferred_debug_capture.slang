@@ -36,7 +36,7 @@ struct SVOPreDeferredDebugCaptureDescriptorIndices {
     uint2 indirect_draw;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVOPreDeferredDebugCaptureDescriptorIndices> descriptor_indices;
 
 /**

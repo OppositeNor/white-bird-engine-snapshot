@@ -27,7 +27,8 @@ static const uint WBE_JOINT_BINDING_INFLUENCE_COUNT = 4;
 /**
  * @brief The affine skinning transform of one joint: the posed global joint transform multiplied by the inverse of its
  * bind-pose global transform, so it moves bind-pose positions to posed positions.
- * @details Stored as the first three rows of the 4x4 matrix; the last row is (0, 0, 0, 1).
+ * @details Stored as the first three rows of the 4x4 matrix; the last row is (0, 0, 0, 1). Row storage avoids loading
+ * whole matrices from descriptor-heap memory, see WBE_SOFTWARE_MATRIX_ROWS.
  */
 struct SkinningTransform {
     /**

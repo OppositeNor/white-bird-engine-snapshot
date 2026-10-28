@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 scope = "test_only"
-include = ["assets/models/models.toml"]
+include = ["assets/models/models.toml", "assets/meshes/material_variants.toml"]
 resources = []

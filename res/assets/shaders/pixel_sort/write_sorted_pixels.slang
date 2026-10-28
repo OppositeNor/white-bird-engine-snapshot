@@ -15,7 +15,7 @@
 /**
  * @file write_sorted_pixels.slang
  * @brief Compute pass that writes the pixels of the source image in the order of the sorted radix sort keys.
- * @details Dispatch one 8x8 workgroup per 8x8 pixel tile. A pixel inside the contrast mask receives the source pixel of
+ * @details Dispatch one 16x16 workgroup per 16x16 pixel tile. A pixel inside the contrast mask receives the source pixel of
  * the sorted key at its line rank, which register_pixel_sort_keys stored in the mask image. That key belongs to the
  * same line, so the masked pixels of every line end up sorted by the metric selected in PixelSortContrast, from the
  * smallest value, top to bottom in the vertical variant and left to right in the horizontal variant. With the span scope,
@@ -40,16 +40,19 @@ struct WriteSortedPixelsDescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "pixel_sort_column_offsets", "read")] uint2 column_offsets;
     /** Image receiving the sorted pixels; must have the extent of source. */
     [WBE_DESCRIPTOR("storage_image", "pixel_sort_destination", "write")] uint2 destination;
+    /** Renderer frame slot receiving shader-debug errors. */
+    [WBE_PUSH_CONSTANT("frame_slot")] uint shader_debug_frame_slot;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<WriteSortedPixelsDescriptorIndices> descriptor_indices;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_dispatch_thread_id : SV_DispatchThreadID) {
     Texture2D<float4> source = ResourceDescriptorHeap[descriptor_indices.source.x];
-    RWStructuredBuffer<uint> keys = ResourceDescriptorHeap[descriptor_indices.keys.x];
+    uint frame_slot = descriptor_indices.shader_debug_frame_slot;
+    CountedBuffer<uint> keys = CountedBuffer<uint>(descriptor_indices.keys, frame_slot);
     RWTexture2D<uint4> mask = ResourceDescriptorHeap[descriptor_indices.mask.x];
     ConstantBuffer<PixelSortContrast> contrast = ResourceDescriptorHeap[descriptor_indices.contrast.x];
     RWStructuredBuffer<uint> column_offsets = ResourceDescriptorHeap[descriptor_indices.column_offsets.x];
@@ -66,7 +69,7 @@ void main(uint3 p_dispatch_thread_id : SV_DispatchThreadID) {
     if (rank != WBE_PIXEL_SORT_UNMASKED) {
         uint2 line_coordinates = pixel_sort_line_coordinates(pixel);
         uint key_index = pixel_sort_key_index(column_offsets, line_coordinates.x, rank);
-        uint key = keys[WBE_RADIX_SORT_DATA_START + key_index];
+        uint key = keys.get(key_index);
         if (contrast.sort_scope == WBE_PIXEL_SORT_SCOPE_SPAN) {
             uint offset = mask_value.y;
             uint span_length = mask_value.z;

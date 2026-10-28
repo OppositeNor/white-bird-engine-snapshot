@@ -13,10 +13,8 @@
    limitations under the License.
 */
 
-#include "deferred_composition/deferred_composition_utils.slang"
-#include "svo/svo.slang"
-#include "svo/svo_utils.slang"
-#include "svo/svo_dynamic_read.slang"
+#include "utils/utils.slang"
+#include "svogi/svogi_utils.slang"
 
 struct DescriptorIndices {
     [WBE_DESCRIPTOR("uniform_buffer", "svo_pre_deferred_debug_info_buffer")]
@@ -25,12 +23,8 @@ struct DescriptorIndices {
     uint2 tree_nodes;
     [WBE_DESCRIPTOR("storage_buffer", "svo_leaf_buffer", "read")]
     uint2 tree_leaves;
-    [WBE_DESCRIPTOR("storage_buffer", "svo_dynamic_nodes", "read")]
-    uint2 dynamic_nodes;
-    [WBE_DESCRIPTOR("storage_buffer", "svo_dynamic_leaves", "read")]
-    uint2 dynamic_leaves;
-    [WBE_DESCRIPTOR("storage_image", "occupancy", "write")]
-    uint2 occupancy;
+    [WBE_DESCRIPTOR("storage_buffer", "atlas", "write")]
+    uint2 atlas;
     [WBE_PUSH_CONSTANT("frame_slot")]
     uint shader_debug_frame_slot;
 };
@@ -39,18 +33,25 @@ struct DescriptorIndices {
 ConstantBuffer<DescriptorIndices> descriptor_indices;
 
 [shader("compute")]
-[numthreads(64, 1, 1)]
-void main(uint p_thread_id : SV_DispatchThreadID) {
+[numthreads(256, 1, 1)]
+void main(uint p_group_id : SV_GroupID, uint p_group_thread_id : SV_GroupThreadID, uint p_thread_id : SV_DispatchThreadID) {
     ConstantBuffer<SVOInfo> svo_info = ResourceDescriptorHeap[descriptor_indices.svo_info.x];
-    RWStructuredBuffer<SVONode> tree_nodes = ResourceDescriptorHeap[descriptor_indices.tree_nodes.x];
-    RWStructuredBuffer<SVONode> dynamic_nodes = ResourceDescriptorHeap[descriptor_indices.dynamic_nodes.x];
+    StructuredBuffer<SVONode> tree_nodes = ResourceDescriptorHeap[descriptor_indices.tree_nodes.x];
     StructuredBuffer<SVOLeaf> tree_leaves = ResourceDescriptorHeap[descriptor_indices.tree_leaves.x];
-    StructuredBuffer<SVODynamicLeafBlock> dynamic_leaves = ResourceDescriptorHeap[descriptor_indices.dynamic_leaves.x];
-    RWTexture3D<float> occupancy = ResourceDescriptorHeap[descriptor_indices.occupancy.x];
+    RWStructuredBuffer<float> atlas = ResourceDescriptorHeap[descriptor_indices.atlas.x];
+    uint frame_slot = descriptor_indices.shader_debug_frame_slot;
 
-    // Injection writes the SVO's normal distribution function.
-    SVOWriteImage<float> svo_occupancy =
-        SVOWriteImage<float>(SVO(tree_nodes, dynamic_nodes, tree_leaves, dynamic_leaves, svo_info, true), occupancy);
-
-    svo_occupancy.write_leaf_data(p_thread_id, 1.0, descriptor_indices.shader_debug_frame_slot);
+    SVOWriteBuffer<float> svo_occupancy = SVOWriteBuffer<float>(SVO(tree_nodes, tree_leaves, svo_info, true), atlas);
+    inject_svo_leaf_occupancy(svo_occupancy, p_thread_id, frame_slot);
+    GroupMemoryBarrierWithGroupSync();
+    // The thread with the top left corner is responsible for the write of the parent node.
+    // We use p_group_thread_id < 32 instead of p_group_thread_id % 8 to try to concentrate as much thread in the same subgroup
+    // possible.
+    if (p_group_thread_id >= 32) {
+        return;
+    }
+    // We extract the thread on the first corner, which is responsible for updating the state of its parent.
+    // Because we have the workgroup grouped in 256 invocations, which is a multiple of 8, meaning we could safely assume that
+    // all the 8 leaves shares the same parent node are allocated in the same workgroup.
+    inject_svo_leaf_parent_occupancy(svo_occupancy, p_group_id * 256 + p_group_thread_id * 8, frame_slot);
 }

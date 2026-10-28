@@ -33,7 +33,7 @@ struct ForwardDescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<ForwardDescriptorIndices> descriptor_indices;
 
 /**
@@ -55,8 +55,9 @@ VSOutput vertex_main(Vertex3DTexturedInput p_input, uint p_instance_id : SV_Vulk
     float3x3 direction_transform = (float3x3)node.transform;
 
     VSOutput output;
-    float4 view_position = mul(camera_info.view, world_position);
-    output.position = mul(camera_info.proj, view_position);
+    float4 view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.view), world_position);
+    output.position = software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.proj), view_position);
     output.world_position = float4(world_position.xyz, float(submesh.material_id));
     output.normal = transform_static_normal(node.normal_transform, p_input.normal);
     output.tangent = normalize(mul(direction_transform, p_input.tangent));
@@ -64,8 +65,10 @@ VSOutput vertex_main(Vertex3DTexturedInput p_input, uint p_instance_id : SV_Vulk
     output.uv = p_input.uv;
     if (light_count > 0) {
         ConstantBuffer<SpotLightInfo> light_info = ResourceDescriptorHeap[descriptor_indices.lights[0].info.x];
-        float4 light_view_position = mul(light_info.view, world_position);
-        output.light_space_pos = mul(light_info.proj, light_view_position);
+        float4 light_view_position =
+            software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(light_info.view), world_position);
+        output.light_space_pos =
+            software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(light_info.proj), light_view_position);
     } else {
         output.light_space_pos = world_position;
     }
@@ -90,16 +93,36 @@ float2 pcss_disk_sample(uint p_sample_index, float p_rotation) {
 
 /**
  * @brief Convert one reversed shadow-map depth sample into light-view distance.
- * @param p_inv_view_proj The light's inverse view-projection matrix.
- * @param p_view The light's view matrix.
+ * @param p_inv_view_proj_row_0 First inverse view-projection row.
+ * @param p_inv_view_proj_row_1 Second inverse view-projection row.
+ * @param p_inv_view_proj_row_2 Third inverse view-projection row.
+ * @param p_inv_view_proj_row_3 Fourth inverse view-projection row.
+ * @param p_view_row_0 First view row.
+ * @param p_view_row_1 Second view row.
+ * @param p_view_row_2 Third view row.
+ * @param p_view_row_3 Fourth view row.
  * @param p_uv The shadow-map coordinate of the sample.
  * @param p_depth The reversed projected depth stored in the shadow map.
  * @return The positive distance from the light along its view axis.
  */
-float shadow_depth_to_light_distance(float4x4 p_inv_view_proj, float4x4 p_view, float2 p_uv, float p_depth) {
-    float4 world_position = mul(p_inv_view_proj, float4(p_uv * 2.0 - 1.0, p_depth, 1.0));
+float shadow_depth_to_light_distance(float4 p_inv_view_proj_row_0,
+    float4 p_inv_view_proj_row_1,
+    float4 p_inv_view_proj_row_2,
+    float4 p_inv_view_proj_row_3,
+    float4 p_view_row_0,
+    float4 p_view_row_1,
+    float4 p_view_row_2,
+    float4 p_view_row_3,
+    float2 p_uv,
+    float p_depth) {
+    float4 world_position = software_mul_float4x4_vector(p_inv_view_proj_row_0,
+        p_inv_view_proj_row_1,
+        p_inv_view_proj_row_2,
+        p_inv_view_proj_row_3,
+        float4(p_uv * 2.0 - 1.0, p_depth, 1.0));
     world_position /= abs(world_position.w) > 0.0001 ? world_position.w : 0.0001;
-    float4 light_view_position = mul(p_view, float4(world_position.xyz, 1.0));
+    float4 light_view_position = software_mul_float4x4_vector(
+        p_view_row_0, p_view_row_1, p_view_row_2, p_view_row_3, float4(world_position.xyz, 1.0));
     return max(abs(light_view_position.z), 0.0001);
 }
 
@@ -141,8 +164,10 @@ float compute_spot_shadow(uint p_spot_light_index, float4 p_light_space_pos) {
     ConstantBuffer<SpotLightInfo> spot_light_info =
         ResourceDescriptorHeap[descriptor_indices.lights[p_spot_light_index].info.x];
     float receiver_distance = max(abs(p_light_space_pos.w), 0.0001);
-    float light_near_distance =
-        shadow_depth_to_light_distance(spot_light_info.inv_view_proj, spot_light_info.view, float2(0.5), 1.0);
+    float light_near_distance = shadow_depth_to_light_distance(WBE_SOFTWARE_MATRIX_ROWS(spot_light_info.inv_view_proj),
+        WBE_SOFTWARE_MATRIX_ROWS(spot_light_info.view),
+        float2(0.5),
+        1.0);
     // r_light_uv = emitter_width * |projection_x_scale| / (4 * near_distance).
     float emitter_radius_uv =
         max(spot_light_info.emitter_width, 0.0) * abs(spot_light_info.proj[0][0]) / (4.0 * light_near_distance);
@@ -158,8 +183,10 @@ float compute_spot_shadow(uint p_spot_light_index, float4 p_light_space_pos) {
         float2 search_uv = uv + pcss_disk_sample(sample_index, sample_rotation) * search_radius_uv;
         float sampled_depth = load_shadow_depth(p_spot_light_index, search_uv, shadow_size, sample_uv);
         if (sampled_depth > current_depth) {
-            blocker_distance_sum += shadow_depth_to_light_distance(
-                spot_light_info.inv_view_proj, spot_light_info.view, sample_uv, sampled_depth);
+            blocker_distance_sum += shadow_depth_to_light_distance(WBE_SOFTWARE_MATRIX_ROWS(spot_light_info.inv_view_proj),
+                WBE_SOFTWARE_MATRIX_ROWS(spot_light_info.view),
+                sample_uv,
+                sampled_depth);
             blocker_count += 1;
         }
     }

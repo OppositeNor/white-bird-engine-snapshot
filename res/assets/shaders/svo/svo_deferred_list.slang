@@ -33,26 +33,18 @@ struct SVONodeTraceInfo {
      */
     enum class IndexType {
         /**
-         * @brief Index into the static node buffer.
+         * @brief Index into the node buffer, which holds the static nodes followed by the dynamic nodes.
          */
-        STATIC_NODE = 0,
+        NODE = 0,
         /**
-         * @brief Index into the dynamic node buffer, without the max_node_count virtual offset.
+         * @brief Index into the leaf buffer, which holds the static leaves followed by the dynamic leaves.
          */
-        DYNAMIC_NODE = 1,
-        /**
-         * @brief Index into the static leaf buffer.
-         */
-        STATIC_LEAF = 2,
-        /**
-         * @brief Leaf slot in the dynamic leaf blocks; block local_index / 8, leaf local_index % 8.
-         */
-        DYNAMIC_LEAF = 3
+        LEAF = 1
     };
     /**
      * @brief Index of the node where traversal resumes.
      * @details traverse_svo() indexes the storage selected by index_type. Construction passes ignore index_type and
-     * store a static or virtual node index.
+     * store a node index.
      */
     uint node_index;
     /**
@@ -79,6 +71,20 @@ struct SVONodeTraceInfo {
      * to SVO::voxel_index_to_global() with curr_depth to locate the reached node or leaf.
      */
     uint voxel_index;
+
+    /**
+     * @brief Test whether node_index refers to the node buffer.
+     */
+    bool is_node() {
+        return index_type == IndexType::NODE;
+    }
+
+    /**
+     * @brief Test whether node_index refers to the leaf buffer.
+     */
+    bool is_leaf() {
+        return index_type == IndexType::LEAF;
+    }
 };
 
 /**
@@ -89,7 +95,7 @@ struct SVONodeTraceInfo {
 SVONodeTraceInfo get_svo_root_trace_info(float3 p_svo_position, uint p_max_depth) {
     SVONodeTraceInfo result;
     result.node_index = (uint(p_svo_position.x >= 0.5) << 2) | (uint(p_svo_position.y >= 0.5) << 1) | uint(p_svo_position.z >= 0.5);
-    result.index_type = SVONodeTraceInfo::IndexType::STATIC_NODE;
+    result.index_type = SVONodeTraceInfo::IndexType::NODE;
     result.curr_depth = 1;
     result.remain_depth = int(p_max_depth) - 1;
     result.svo_position = frac(p_svo_position * 2.0);

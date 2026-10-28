@@ -32,7 +32,7 @@ struct CountPixelSortMaskDescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "pixel_sort_column_offsets", "write")] uint2 column_offsets;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<CountPixelSortMaskDescriptorIndices> descriptor_indices;
 
 [shader("compute")]

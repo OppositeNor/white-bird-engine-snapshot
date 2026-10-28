@@ -28,7 +28,7 @@ struct PresentPostProcessingDescriptorIndices {
     uint2 result_sampler;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<PresentPostProcessingDescriptorIndices> descriptor_indices;
 
 [shader("fragment")]

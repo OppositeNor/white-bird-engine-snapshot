@@ -433,6 +433,25 @@ TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaMeshWithoutSkeleton) {
     WBE::RUSchemaMesh3D scheme;
     scheme.deserialize(parser.get_data());
     ASSERT_FALSE(scheme.skeleton_id.has_value());
+    ASSERT_FALSE(scheme.sdf_id.has_value());
+}
+
+TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaMeshSDFId) {
+    std::string json_buffer = R"(
+    {
+        "id": "test_mesh_with_sdf",
+        "type": "mesh",
+        "opaque_instances": {"submeshes": [], "instances": []},
+        "masked_instances": {"submeshes": [], "instances": []},
+        "double_sided_opaque_instances": {"submeshes": [], "instances": []},
+        "sdf_id": "test_mesh_with_sdf.sdf"
+    }
+    )";
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(json_buffer);
+    WBE::RUSchemaMesh3D scheme;
+    scheme.deserialize(parser.get_data());
+    ASSERT_EQ(scheme.sdf_id, "test_mesh_with_sdf.sdf");
 }
 
 TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaSkeletonGeneral) {
@@ -452,6 +471,61 @@ TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaSkeletonGeneral) {
     ASSERT_EQ(scheme.joints.binary_id, "test_skeleton_joints");
     ASSERT_EQ(scheme.joints.start, 16U);
     ASSERT_EQ(scheme.joints.size, 136U);
+}
+
+TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaSDFGeneral) {
+    std::string json_buffer = R"(
+    {
+        "id": "test_sdf",
+        "type": "sdf",
+        "data_structure": "texture_3d",
+        "texture_id": "test_sdf_texture",
+        "aabb": {"center": [1.0, -2.0, 0.5], "width": 2.0, "height": 1.5, "depth": 1.0}
+    }
+    )";
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(json_buffer);
+    WBE::RUSchemaSDF scheme;
+    scheme.deserialize(parser.get_data());
+    ASSERT_EQ(scheme.id, "test_sdf");
+    ASSERT_EQ(scheme.type, "sdf");
+    ASSERT_EQ(scheme.data_structure, WBE::RUSDFDataStructure::TEXTURE_3D);
+    ASSERT_EQ(scheme.texture_id, "test_sdf_texture");
+    ASSERT_EQ(scheme.aabb.center, (std::vector<float>{1.0F, -2.0F, 0.5F}));
+    ASSERT_FLOAT_EQ(scheme.aabb.width, 2.0F);
+    ASSERT_FLOAT_EQ(scheme.aabb.height, 1.5F);
+    ASSERT_FLOAT_EQ(scheme.aabb.depth, 1.0F);
+}
+
+TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaSDFRequiresTextureId) {
+    std::string json_buffer = R"(
+    {
+        "id": "test_sdf_missing_texture",
+        "type": "sdf",
+        "data_structure": "texture_3d",
+        "aabb": {"center": [0.0, 0.0, 0.0], "width": 1.0, "height": 1.0, "depth": 1.0}
+    }
+    )";
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(json_buffer);
+    WBE::RUSchemaSDF scheme;
+    EXPECT_THROW(scheme.deserialize(parser.get_data()), std::exception);
+}
+
+TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaSDFRejectsUnknownDataStructure) {
+    std::string json_buffer = R"(
+    {
+        "id": "test_sdf_octree",
+        "type": "sdf",
+        "data_structure": "octree",
+        "texture_id": "test_sdf_texture",
+        "aabb": {"center": [0.0, 0.0, 0.0], "width": 1.0, "height": 1.0, "depth": 1.0}
+    }
+    )";
+    WBE::ParserJSON parser;
+    parser.parse_from_buffer(json_buffer);
+    WBE::RUSchemaSDF scheme;
+    EXPECT_THROW(scheme.deserialize(parser.get_data()), std::exception);
 }
 
 TEST_F(WBEResourceSchemaDeserializationTest, RUSchemaSkeletonRequiresJointFields) {

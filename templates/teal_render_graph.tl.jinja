@@ -132,6 +132,8 @@ local record render_graph
         p_additional_usage?: {wbe.ImageUsageFlagVK | integer}): Resource
     image_view: function(p_id: string, p_image: Resource, p_view?: wbe.RendImageViewParamsVK): Resource
     clamp_to_edge_sampler: function(p_id: string, p_params?: wbe.RendSamplerParamsVK): Resource
+    compute_pipeline: function(p_key: string): Resource
+    graphics_pipeline: function(p_key: string): Resource
     import_resource: function(p_id: string): Resource
     port: function(p_id: string): Resource
     reference: function(p_id: string): Resource

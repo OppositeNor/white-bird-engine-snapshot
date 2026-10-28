@@ -25,6 +25,18 @@ id = "draw_cube_unshaded_pipeline"
 type = "graphics_pipeline"
 vertex_stage_id = "draw_cube_unshaded_shader"
 fragment_stage_id = "draw_cube_unshaded_shader"
+fragment_stage_entry = "fragment_main"
+depth_test = false
+depth_write = false
+color_blend = false
+
+# Draws materials of the "tinted" pipeline variant (render_graphs.draw_material_variants).
+[[resources]]
+id = "draw_cube_unshaded_tinted_pipeline"
+type = "graphics_pipeline"
+vertex_stage_id = "draw_cube_unshaded_shader"
+fragment_stage_id = "draw_cube_unshaded_shader"
+fragment_stage_entry = "fragment_tinted_main"
 depth_test = false
 depth_write = false
 color_blend = false

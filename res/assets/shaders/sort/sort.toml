@@ -120,3 +120,163 @@ metadata = "assets/shaders/sort/radix_sort_scatter_24_32.json"
 macros = [
     { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "24" },
 ]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_0_8"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_0_8.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_0_8.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "0" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_8_16"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_8_16.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_8_16.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "8" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_16_24"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_16_24.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_16_24.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "16" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_24_32"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_24_32.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_24_32.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "24" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_32_40"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_32_40.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_32_40.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "32" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_40_48"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_40_48.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_40_48.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "40" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_48_56"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_48_56.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_48_56.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "48" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_histogram_workgroup_process_56_64"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_56_64.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_histogram_workgroup_process_56_64.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "56" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_0_8"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_0_8.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_0_8.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "0" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_8_16"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_8_16.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_8_16.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "8" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_16_24"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_16_24.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_16_24.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "16" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_24_32"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_24_32.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_24_32.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "24" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_32_40"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_32_40.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_32_40.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "32" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_40_48"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_40_48.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_40_48.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "40" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_48_56"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_48_56.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_48_56.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "48" },
+]
+
+[[resources]]
+id = "radix_sort_uint2_scatter_56_64"
+source_type = "shader"
+src = "assets/shaders/sort/radix_sort_uint2_scatter.slang"
+dst = "assets/shaders/sort/radix_sort_uint2_scatter_56_64.spv"
+metadata = "assets/shaders/sort/radix_sort_uint2_scatter_56_64.json"
+macros = [
+    { name = "WBE_RADIX_HISTOGRAM_BIT_REGION", value = "56" },
+]

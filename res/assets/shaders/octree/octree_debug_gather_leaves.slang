@@ -68,7 +68,7 @@ struct OctreeDebugGatherLeavesDescriptorIndices {
     uint2 node_indirect_draw;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<OctreeDebugGatherLeavesDescriptorIndices> descriptor_indices;
 
 groupshared uint subgrid_mask[OCTREE_DEBUG_SUBGRID_MASK_WORD_COUNT];

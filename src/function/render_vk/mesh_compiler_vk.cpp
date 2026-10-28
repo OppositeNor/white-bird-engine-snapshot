@@ -144,6 +144,7 @@ DrawPlan plan_draws(
         draw_batch.first_draw = source_batch.first_draw;
         draw_batch.draw_count = source_batch.draw_count;
         draw_batch.vertex_bindings = source_batch.vertex_bindings;
+        draw_batch.pipeline_variant = std::move(source_batch.pipeline_variant);
         draw_batch.vertex_buffers.reserve(source_batch.vertex_binaries.size());
         for (size_t i = 0; i < source_batch.vertex_binaries.size(); ++i) {
             draw_batch.vertex_buffers.push_back(VertexBufferBindingVK{
@@ -346,6 +347,9 @@ Vector<MeshDrawBatchPlannerVK::Draw, RenderAllocator> make_static_draws(
         draw.indices = submesh.indices;
         draw.instance_count = static_cast<uint32_t>(submesh.instance_count);
         draw.first_instance = p_first_instances[i];
+        // compile() rejects submeshes without a material before planning.
+        WBE_DEBUG_ASSERT(submesh.material != nullptr);
+        draw.pipeline_variant = submesh.material->get_pipeline_variant();
         result.push_back(std::move(draw));
     }
     return result;

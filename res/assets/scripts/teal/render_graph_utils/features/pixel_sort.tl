@@ -24,7 +24,7 @@ local sort = require("render_graph_utils.sort")
 local ceil_div = math_utils.ceil_div
 
 -- Must match the numthreads of copy_pixel_sort_source.slang and write_sorted_pixels.slang.
-local PIXEL_SORT_TILE_SIZE = 8
+local PIXEL_SORT_TILE_SIZE = 16
 -- Must match the numthreads of count_pixel_sort_mask.slang and register_pixel_sort_keys.slang, which run one invocation
 -- per sorted line.
 local PIXEL_SORT_COLUMN_WORKGROUP_SIZE = 64
@@ -98,7 +98,7 @@ function pixel_sort.subgraph(p_id: string, p_params: wbe.PixelSortRecipeParams, 
     local column_offsets = graph:add_storage_buffer(
         "pixel_sort_column_offsets", (PIXEL_SORT_COLUMN_OFFSETS_START + line_count) * UINT32_SIZE)
     -- The sort is sized for every pixel inside the mask.
-    local sort_buffers = sort.radix_sort_buffers(RADIX_SORT_BUFFER_NAMES, element_count, graph)
+    local sort_buffers = sort.radix_sort_buffers(RADIX_SORT_BUFFER_NAMES, element_count)
 
     local direction_suffix = "_" .. string.lower(direction) .. "_shader"
     local copy_source_pipeline = graph:add_compute_pipeline("copy_pixel_sort_source_shader")

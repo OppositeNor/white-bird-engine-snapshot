@@ -129,7 +129,8 @@ and pushes the indices and push constants when recording. A missing resource or 
 Material texture semantics are shader metadata, not renderer enums. Integer index fields in the global `MaterialParams`
 struct declare texture roles with `WBE_TEXTURE`: an explicit string names the role, and an omitted one uses the field name.
 `rma` is the canonical role for the roughness, metallic, and ambient-occlusion channel pack. Materials carry no
-`material_type`; the graphics pipeline defines the shader model.
+`material_type`; the graphics pipeline defines the shader model. A material may name a `pipeline_variant`, which selects the
+pipeline a draw task draws it with (see Drawing).
 
 The contract names are fixed in `utils/utils.slang`: the reflection-only `MaterialTextureContractMetadata.material_sampler` and
 `.textures` describe the resource shape, and `MaterialParamsBuffer.materials` is the runtime table. Applications may configure
@@ -219,12 +220,23 @@ is validated against the reflection-only `ParameterBlock<MeshContractMetadata> m
 ### Drawing
 
 Draw meshes with `RTGraphicsDrawMeshVK` (recipe type `graphics_draw_mesh`, or `RTGraphicsDrawMeshVK::add_to_graph()` in C++).
-Its params (`RTParamsGraphicsDrawMeshVK`) name the mesh resource key, the graphics pipeline's render-database key, the
-`parts` to draw (`opaque`, `masked`, `double_sided`), an optional `transform` resource, the render extent, clear values, and
-load ops. When the task is added it acquires the compiled mesh, imports it under its key if not yet imported (so shared
-meshes are compiled and imported once), builds and imports the material table for the pipeline's contract, and aliases the
-`REND_RES_MESH_*` ids the pipeline declares. The caller aliases the render targets. Do not assemble mesh draws from
+Its params (`RTParamsGraphicsDrawMeshVK`) name the mesh resource key, a `pipeline` map from material pipeline variants to
+graphics pipelines' render-database keys, the `parts` to draw (`opaque`, `masked`, `double_sided`), an optional `transform`
+resource, the render extent, clear values, and load ops. When the task is added it acquires the compiled mesh, imports it under its key if not yet imported (so shared
+meshes are compiled and imported once), builds and imports the material table for the pipelines' contract, and aliases the
+`REND_RES_MESH_*` ids the pipelines declare. The caller aliases the render targets. Do not assemble mesh draws from
 `RTRunGraphicsPipelineIndirectVK` by hand; use that task directly only for non-mesh indexed indirect draws.
+
+Different submeshes of one mesh can be drawn with different pipelines in one task. Each material has a pipeline variant
+(`RUMaterial::get_pipeline_variant()`, `default` unless the material sets `pipeline_variant`). The mesh compiler batches
+draws only with draws of the same variant, so every `MeshDrawBatchVK` carries one variant. `pipeline` maps each variant the
+task draws to its pipeline (`pipeline = { default = gbuffer_opaque, foliage = graph:add_graphics_pipeline("gbuffer_foliage") }`;
+in C++, `RTParamsGraphicsDrawMeshVK::make_default_pipeline(key)` builds a one-pipeline map). The task binds each batch's
+pipeline before its indirect draw. Drawing a variant the task does not map throws; mapping a variant the mesh does not use is allowed, so one map
+can serve several meshes. All of a task's pipelines must render to the same targets, the task aliases the union of the
+`REND_RES_MESH_*` ids they declare, and the pipelines that read `material_params` must share one material texture contract,
+because the material table is aliased once per task. `render_graphs.draw_material_variants`
+(`wbe_render_test_vulkan_draw_material_variants_test`) draws a cube whose faces use two variants.
 
 Static meshes are drawn where their instance transforms put them, with shaders that do not declare `mesh_transform`. Placed
 (dynamic) meshes use `WBE_MESH_TRANSFORM` variants: `params.transform` names a one-`GeometryNodeGPU` buffer owned by whatever
@@ -235,7 +247,7 @@ it as `<entity key>.transform`.
 ```lua
 local params: wbe.RTParamsGraphicsDrawMeshVK = {
     mesh = "model_cube_static.mesh",
-    pipeline = "draw_cube_unshaded_pipeline",
+    pipeline = { default = "draw_cube_unshaded_pipeline" },
     parts = { "opaque" },
 }
 -- task: { id = "run_static_mesh", type = "graphics_draw_mesh", params = params,

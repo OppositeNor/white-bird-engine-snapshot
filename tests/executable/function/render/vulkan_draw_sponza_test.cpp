@@ -408,7 +408,7 @@ void ApplicationVulkanDrawSponzaTest::setup_draw_task(const ForwardSceneViewConf
             .params =
                 WBE::RTParamsGraphicsDrawMeshVK{
                     .mesh = std::string(WBE::STATIC_MESH_KEY),
-                    .pipeline = std::string(p_pipeline_key),
+                    .pipeline = WBE::RTParamsGraphicsDrawMeshVK::make_default_pipeline(p_pipeline_key),
                     .parts = {p_part},
                     .render_extent = p_extent,
                     .clear_values = {WBE::make_clear_color(0.0F, 0.0F, 0.0F, 0.0F), WBE::make_clear_depth(0.0F)},

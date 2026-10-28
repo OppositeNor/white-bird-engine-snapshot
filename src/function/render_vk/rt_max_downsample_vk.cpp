@@ -45,7 +45,7 @@
 namespace WhiteBirdEngine {
 namespace {
 
-constexpr uint32_t WORKGROUP_SIZE = 8;
+constexpr uint32_t WORKGROUP_SIZE = 16;
 constexpr uint32_t DESCRIPTOR_INDEX_SIZE = sizeof(uint32_t) * 2;
 
 const ShaderDescriptorHeapFieldVK& find_descriptor_field(
@@ -87,7 +87,7 @@ void record_level_barrier(VkCommandBuffer p_command_buffer) {
 }
 
 void dispatch_level(VkCommandBuffer p_command_buffer, VkExtent3D p_base_extent, uint32_t p_destination_level) {
-    // Cover the destination level in 8x8 workgroups.
+    // Cover the destination level in 16x16 workgroups.
     const uint32_t destination_width = mip_extent(p_base_extent.width, p_destination_level);
     const uint32_t destination_height = mip_extent(p_base_extent.height, p_destination_level);
     vkCmdDispatch(p_command_buffer,

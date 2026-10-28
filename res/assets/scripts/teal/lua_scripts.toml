@@ -66,6 +66,11 @@ source_type = "script"
 source_file = "assets/scripts/teal/render_graphs/draw_cube_unshaded.tl"
 
 [[resources]]
+id = "render_graphs.draw_material_variants"
+source_type = "script"
+source_file = "assets/scripts/teal/render_graphs/draw_material_variants.tl"
+
+[[resources]]
 id = "render_graphs.pixel_sorting"
 source_type = "script"
 source_file = "assets/scripts/teal/render_graphs/pixel_sorting.tl"

@@ -34,11 +34,11 @@ struct DirectLightingDescriptorIndices {
     uint2 direct_lighting_output;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DirectLightingDescriptorIndices> descriptor_indices;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThreadID) {
     ConstantBuffer<CompositionCamera> camera_info = ResourceDescriptorHeap[descriptor_indices.camera_info.x];
     Texture2D<float4> gbuffer_albedo = ResourceDescriptorHeap[descriptor_indices.gbuffer_albedo.x];
@@ -49,7 +49,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
     RWTexture2D<float4> direct_lighting_output = ResourceDescriptorHeap[descriptor_indices.direct_lighting_output.x];
     uint width;
     uint height;
-    uint2 dispatch_thread_id = z_order_swizzle_8x8(p_group_id.xy, p_group_thread_id.xy);
+    uint2 dispatch_thread_id = z_order_swizzle_16x16(p_group_id.xy, p_group_thread_id.xy);
     direct_lighting_output.GetDimensions(width, height);
     if (dispatch_thread_id.x >= width || dispatch_thread_id.y >= height) {
         return;
@@ -67,7 +67,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
     float3 normal = octahedron_decode(octa);
     float roughness = clamp(rma_flags.r, 0.04, 1.0);
     float metallic = clamp(rma_flags.g, 0.0, 1.0);
-    float3 world_pos = world_position_from_depth(uv, depth, camera_info.inv_view_proj);
+    float3 world_pos = world_position_from_depth(uv, depth, WBE_SOFTWARE_MATRIX_ROWS(camera_info.inv_view_proj));
     float3 view_direction = normalize(camera_info.camera_world_pos.xyz - world_pos);
     float3 f0 = lerp(float3(0.04), base_color, metallic);
     float3 direct_lighting = float3(0.0);

@@ -72,8 +72,8 @@ build tests, every resource (global and test-only) under `test_env/res`.
 ### Runtime types
 
 The engine loads `audio`, `binary`, `font`, `image`, `texture`, `text`, `script`, and `video` (core); `shader`,
-`graphics_pipeline`, `ray_tracing_pipeline`, `material`, `mesh`, and `skeleton` (renderer); and `component`, `prefab`,
-`world`, and `scene` (scene).
+`graphics_pipeline`, `ray_tracing_pipeline`, `material`, `mesh`, `skeleton`, and `sdf` (renderer); and `component`,
+`prefab`, `world`, and `scene` (scene).
 
 ## Shader Resources
 
@@ -127,6 +127,11 @@ textures = [
 Materials do not declare a `material_type` or graphics pipelines; the graphics pipeline the application draws them with and its
 reflected shader metadata define the rendering contract.
 
+- An optional `pipeline_variant` (a non-empty string without NUL, `default` when absent) names which of a draw task's pipelines
+  draws the material, for example `pipeline_variant = "foliage"`. Variant names are free strings: the recipe maps each to a
+  compiled pipeline per pass (see `docs/renderer_vk/renderer_vk.md`, Drawing), so a material stays independent of passes and
+  attachment formats.
+
 - Each texture slot requires a non-empty `texture_role`. Shaders select roles through reflected `WBE_TEXTURE` attributes.
 - The loader retains each exact texture role name together with its runtime hash; consumers use both and never treat a hash alone
   as identity. Resource units do not use closed role enums.
@@ -171,12 +176,23 @@ validate varying locations, scalar/vector formats, and resource byte layouts.
 - A hand-authored `mesh` gives each submesh `vertices_data` and `indices_data` (position, normal, tangent, bitangent, uv, and
   optional joint bindings); ACP writes the binaries and an opaque submesh with one identity instance. Examples:
   `res/assets/meshes/cube.toml`, `triangle.toml`.
+- `model`, `static_geometry`, and `mesh` accept `sdf_config = { enabled, resolution, data_structure }`. `enabled` defaults
+  to false, and the other fields are read only when it is true: `resolution` is the number of samples per unit of distance,
+  and `data_structure` must be `texture_3d`. ACP samples the signed distance to the mesh's triangles, placed by their
+  instances, on a uniform grid over their bounds, enlarged to whole samples about its center with each sample at a cell
+  center. It writes the samples to a `<mesh id>.sdf_texture` 3D KTX2 texture beside the geometry and emits an `sdf`
+  resource `<mesh id>.sdf`, which the mesh references with `sdf_id`. Every submesh of a hand-authored `mesh` with an SDF
+  must use inline geometry. The host `SDFCompilerMeshToSDF` samples with mesh-to-sdf's depth scans, rendered through EGL,
+  and stores each distance rounded toward zero.
 
 A runtime `mesh` has `opaque_instances`, `masked_instances`, and `double_sided_opaque_instances` categories. Each submesh
 declares `material` (inline) or `material_id`, a required `aabb`, `vertex_bindings` (each a binary view with `stride` and
 `attributes` of `role`, `type`, `offset`), `indices`, `first_instance`, and `instance_count`; instances carry a
 `global_transform`. An optional `skeleton_id` references a `skeleton` resource (`joints = { binary_id, start, size }`), which
-submeshes with `joint_binding_ids` / `joint_binding_weights` attributes require.
+submeshes with `joint_binding_ids` / `joint_binding_weights` attributes require. An optional `sdf_id` references an `sdf`
+resource in the mesh's space: `data_structure` (`texture_3d`: a 3D `VK_FORMAT_R16_SFLOAT` texture with one mip level
+and one texel per sample), `texture_id`, and the `aabb` the samples cover, with each sample at the center of its texel's
+cell. Distances are negative inside the surface.
 
 ## Script Resources
 

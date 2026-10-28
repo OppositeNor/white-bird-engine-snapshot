@@ -360,7 +360,7 @@ RendTaskDescVK& VoxelRenderFeatureOctree::add_construction_render_task(RendGraph
         p_task_id,
         RTParamsGraphicsDrawMeshVK{
             .mesh = std::string(STATIC_MESH_KEY),
-            .pipeline = std::string(BUILD_PIPELINE),
+            .pipeline = RTParamsGraphicsDrawMeshVK::make_default_pipeline(BUILD_PIPELINE),
             .parts = {p_double_sided ? MeshPartVK::DOUBLE_SIDED : MeshPartVK::OPAQUE},
             .render_extent = extent,
         },

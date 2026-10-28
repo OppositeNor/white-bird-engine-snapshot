@@ -25,7 +25,7 @@ struct CombineLightingDescriptorIndices {
     uint2 result_image;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<CombineLightingDescriptorIndices> descriptor_indices;
 
 /**
@@ -34,7 +34,7 @@ ConstantBuffer<CombineLightingDescriptorIndices> descriptor_indices;
  * @param p_group_thread_id Thread index within the workgroup.
  */
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThreadID) {
     Texture2D<float4> gbuffer_rma = ResourceDescriptorHeap[descriptor_indices.gbuffer_rma.x];
     Texture2D<float4> direct_lighting = ResourceDescriptorHeap[descriptor_indices.direct_lighting.x];
@@ -42,7 +42,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
     RWTexture2D<float4> result_image = ResourceDescriptorHeap[descriptor_indices.result_image.x];
     uint width;
     uint height;
-    uint2 dispatch_thread_id = z_order_swizzle_8x8(p_group_id.xy, p_group_thread_id.xy);
+    uint2 dispatch_thread_id = z_order_swizzle_16x16(p_group_id.xy, p_group_thread_id.xy);
     result_image.GetDimensions(width, height);
     if (dispatch_thread_id.x >= width || dispatch_thread_id.y >= height) {
         return;

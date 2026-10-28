@@ -20,6 +20,8 @@
 #include "function/render/render_resource_unit.hh"
 #include <cstdint>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -27,7 +29,7 @@ namespace WhiteBirdEngine {
 
 /**
  * @class MeshDrawBatchPlannerVK
- * @brief Groups mesh draws by shared vertex layout and buffer placement, independent of any shader.
+ * @brief Groups mesh draws by pipeline variant, shared vertex layout, and buffer placement, independent of any shader.
  *
  * Stateless and copyable. Planning preserves supplied instance indices when reordering draws.
  */
@@ -84,6 +86,10 @@ public:
          * relative to these bases.
          */
         std::vector<VkDeviceSize> vertex_buffer_offsets;
+        /**
+         * @brief Pipeline variant shared by every draw of the batch.
+         */
+        std::string pipeline_variant;
     };
 
     /**
@@ -113,6 +119,11 @@ public:
          * @brief firstInstance value addressing the draw's instance records.
          */
         uint32_t first_instance = 0;
+        /**
+         * @brief Pipeline variant of the drawn material; only draws with equal variants share a batch. The viewed storage
+         * must outlive the build() call.
+         */
+        std::string_view pipeline_variant = MATERIAL_PIPELINE_VARIANT_DEFAULT;
     };
 
     /**

@@ -413,6 +413,15 @@ RefRes<RUMaterial> resolve_material(IResourceChunk& p_res_chunk, const RUSchemaM
         }
         texture_slots.push_back(texture_slot);
     }
+    if (p_material.pipeline_variant.has_value()) {
+        if (p_material.pipeline_variant->empty()) {
+            throw std::runtime_error("Failed to populate material resource: pipeline_variant must not be empty.");
+        }
+        if (p_material.pipeline_variant->contains('\0')) {
+            throw std::runtime_error("Failed to populate material resource: pipeline_variant must not contain NUL.");
+        }
+        resource_unit.pipeline_variant = populate_text(p_res_chunk, *p_material.pipeline_variant);
+    }
     resource_unit.texture_count = texture_slots.size();
     if (!texture_slots.empty()) {
         resource_unit.textures =
@@ -429,10 +438,10 @@ RefRes<RUMaterial> resolve_material(IResourceChunk& p_res_chunk, const RUSchemaM
     return saved_resource;
 }
 
-RUAABB3D resolve_aabb(const RUSchemaAABB3D& p_scheme) {
+RUAABB3D resolve_aabb(const RUSchemaAABB3D& p_scheme, std::string_view p_context) {
     if (p_scheme.center.size() != 3) {
-        throw std::runtime_error(
-            std::format("Failed to populate mesh: submesh aabb center must contain 3 values, got {}.", p_scheme.center.size()));
+        throw std::runtime_error(std::format(
+            "Failed to populate {}: aabb center must contain 3 values, got {}.", p_context, p_scheme.center.size()));
     }
     return RUAABB3D{
         .center = glm::vec3(p_scheme.center[0], p_scheme.center[1], p_scheme.center[2]),
@@ -449,7 +458,7 @@ void resolve_submesh_data(IResourceChunk& p_res_chunk, const RUSchemaSubmesh3D& 
         }
         p_resource_unit.material = resolve_material(p_res_chunk, p_scheme.material.value());
     }
-    p_resource_unit.aabb = resolve_aabb(p_scheme.aabb);
+    p_resource_unit.aabb = resolve_aabb(p_scheme.aabb, "mesh submesh");
     if (p_scheme.vertex_bindings.empty()) {
         throw std::runtime_error("Failed to populate submesh resource unit: at least one vertex binding is required.");
     }
@@ -594,6 +603,12 @@ std::any ResourceUnitLoaderMesh::populate_scheme_ptr(IResourceChunk& p_res_chunk
     if (has_skeleton && typed_scheme.skeleton_id->contains('\0')) {
         throw std::runtime_error("Failed to populate mesh: skeleton_id must not contain NUL.");
     }
+    if (typed_scheme.sdf_id.has_value() && typed_scheme.sdf_id->empty()) {
+        throw std::runtime_error("Failed to populate mesh: sdf_id must be non-empty.");
+    }
+    if (typed_scheme.sdf_id.has_value() && typed_scheme.sdf_id->contains('\0')) {
+        throw std::runtime_error("Failed to populate mesh: sdf_id must not contain NUL.");
+    }
     RUMesh3D resource_unit;
     resource_unit.opaque_instances = populate_submesh_instances(p_res_chunk, typed_scheme.opaque_instances, has_skeleton);
     resource_unit.masked_instances = populate_submesh_instances(p_res_chunk, typed_scheme.masked_instances, has_skeleton);
@@ -602,6 +617,9 @@ std::any ResourceUnitLoaderMesh::populate_scheme_ptr(IResourceChunk& p_res_chunk
     auto saved_resource = p_res_chunk.push_res_unit(typed_scheme.id, resource_unit).force_cast<RUMesh3D>();
     if (has_skeleton) {
         p_res_chunk.create_ref_to(saved_resource->skeleton, typed_scheme.skeleton_id.value());
+    }
+    if (typed_scheme.sdf_id.has_value()) {
+        p_res_chunk.create_ref_to(saved_resource->sdf, typed_scheme.sdf_id.value());
     }
     return saved_resource;
 }
@@ -656,6 +674,33 @@ void ResourceUnitLoaderSkeleton::populate_scheme_from_data(IResourceChunk& p_res
     populate_scheme_ptr(p_res_chunk, scheme);
 }
 
+std::span<const std::string> ResourceUnitLoaderSDF::get_supported_resource_types() const {
+    static const std::array<std::string, 1> supported_resource_types = {"sdf"};
+    return supported_resource_types;
+}
+
+std::any ResourceUnitLoaderSDF::populate_scheme_ptr(IResourceChunk& p_res_chunk, const RUSchema& p_scheme) const {
+    const auto& typed_scheme = get_typed_scheme<RUSchemaSDF>(p_scheme, "sdf");
+    if (typed_scheme.texture_id.empty()) {
+        throw std::runtime_error(std::format("Failed to populate SDF {}: texture_id must be non-empty.", typed_scheme.id));
+    }
+    if (typed_scheme.texture_id.contains('\0')) {
+        throw std::runtime_error(std::format("Failed to populate SDF {}: texture_id must not contain NUL.", typed_scheme.id));
+    }
+    RUSDF resource_unit;
+    resource_unit.data_structure = typed_scheme.data_structure;
+    resource_unit.aabb = resolve_aabb(typed_scheme.aabb, "SDF");
+    auto saved_resource = p_res_chunk.push_res_unit(typed_scheme.id, resource_unit).force_cast<RUSDF>();
+    p_res_chunk.create_ref_to(saved_resource->texture, typed_scheme.texture_id);
+    return saved_resource;
+}
+
+void ResourceUnitLoaderSDF::populate_scheme_from_data(IResourceChunk& p_res_chunk, const DataValue& p_scheme_data) const {
+    RUSchemaSDF scheme;
+    scheme.deserialize(p_scheme_data);
+    populate_scheme_ptr(p_res_chunk, scheme);
+}
+
 void register_renderer_vk_resource_unit_loaders() {
     auto* resource_manager = ResourceManager::get_singleton();
     resource_manager->add_resource_unit_loader(make_ref<ResourceUnitLoaderShader>(global_allocator()));
@@ -664,6 +709,7 @@ void register_renderer_vk_resource_unit_loaders() {
     resource_manager->add_resource_unit_loader(make_ref<ResourceUnitLoaderMaterial>(global_allocator()));
     resource_manager->add_resource_unit_loader(make_ref<ResourceUnitLoaderMesh>(global_allocator()));
     resource_manager->add_resource_unit_loader(make_ref<ResourceUnitLoaderSkeleton>(global_allocator()));
+    resource_manager->add_resource_unit_loader(make_ref<ResourceUnitLoaderSDF>(global_allocator()));
 }
 
 } // namespace WhiteBirdEngine

@@ -25,5 +25,6 @@ groupshared uint scratch[KERNEL_WORKGROUP_SIZE];
 [shader("compute")]
 [numthreads(KERNEL_WORKGROUP_SIZE, 1, 1)]
 void main(uint3 p_group_thread_id : SV_GroupThreadID) {
-    workgroup_general_prefix_sum<KERNEL_WORKGROUP_SIZE>(data, DATA_START, DATA_COUNT, p_group_thread_id.x, scratch);
+    workgroup_general_prefix_sum<uint, Add<uint>, KERNEL_WORKGROUP_SIZE>(data, DATA_START, DATA_COUNT, p_group_thread_id.x,
+        scratch);
 }

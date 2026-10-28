@@ -49,7 +49,7 @@ end
 -- Adds to p_graph the tasks that gather the leaves of p_params.mesh and deduplicate them.
 function svo_3.add_leaf_deduplication(p_graph: Graph.Graph, p_params: svo_3.LeafParams): svo_3.LeafDeduplication
     local buffers = dedup_large.buffers({ keys = "svo_3_deferred_list", unique_keys = "svo_3_unique_leaves" },
-        p_params.max_leaf_count, p_graph)
+        p_params.max_leaf_count)
     local deferred_list = buffers.keys
     local queue_family = p_params.queue_family
 
@@ -60,7 +60,7 @@ function svo_3.add_leaf_deduplication(p_graph: Graph.Graph, p_params: svo_3.Leaf
     local extent = 1 << p_params.max_depth
     local gather = p_graph:draw_mesh("svo_3_gather_leaves", {
         mesh = p_params.mesh,
-        pipeline = p_graph:add_graphics_pipeline("svo_3_gather_leaves_pipeline"),
+        pipeline = { default = p_graph:add_graphics_pipeline("svo_3_gather_leaves_pipeline") },
         parts = { "opaque", "double_sided" },
         render_extent = { width = extent, height = extent },
     }, { aliases = { svo_info = p_params.svo_info, svo_deferred_list = deferred_list } })
@@ -69,7 +69,7 @@ function svo_3.add_leaf_deduplication(p_graph: Graph.Graph, p_params: svo_3.Leaf
         { pipeline = p_graph:add_compute_pipeline("svo_3_prepare_leaves_shader"),
             aliases = { svo_info = p_params.svo_info, svo_deferred_list = deferred_list } },
     }
-    for _, dispatch in ipairs(dedup_large.dispatches(p_graph, buffers)) do
+    for _, dispatch in ipairs(dedup_large.dispatches(buffers)) do
         dispatches[#dispatches + 1] = dispatch
     end
     local deduplicate = p_graph:compute_sequential("svo_3_deduplicate_leaves",

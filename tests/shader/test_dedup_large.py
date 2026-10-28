@@ -24,6 +24,7 @@ from test_large_prefix_scan import DATA_START, GUARD_COUNT, GUARD_VALUE, create_
 RANDOM_SEED = 20251003
 # Must match dedup_large_utils.slang.
 WORKGROUP_SIZE = 256
+KEY_BYTE_SIZE = 4
 
 KernelLoader = Callable[[str, dict[str, str | int]], spy.ComputeKernel]
 
@@ -36,7 +37,10 @@ def rng() -> np.random.Generator:
 def deduplicate(p_device: spy.Device, p_load_kernel: KernelLoader, p_sorted_keys: np.ndarray) -> np.ndarray:
     """Marks, scans, and scatters the sorted keys, and returns the unique keys buffer."""
     key_count = len(p_sorted_keys)
-    keys = create_buffer(p_device, make_scan_data(p_sorted_keys))
+    # The keys are a counted buffer, whose header holds their byte size.
+    key_data = make_scan_data(p_sorted_keys)
+    key_data[0] = key_count * KEY_BYTE_SIZE
+    keys = create_buffer(p_device, key_data)
     # The marks overwrite the guard-filled elements, and the scan reads the count the marks write.
     marks = create_buffer(p_device, np.full(DATA_START + key_count + GUARD_COUNT, GUARD_VALUE, dtype=np.uint32))
     unique_keys = create_buffer(p_device, np.full(DATA_START + key_count + GUARD_COUNT, GUARD_VALUE, dtype=np.uint32))
@@ -54,7 +58,7 @@ def check_deduplicate(p_device: spy.Device, p_load_kernel: KernelLoader, p_keys:
     sorted_keys = np.sort(p_keys)
     result = deduplicate(p_device, p_load_kernel, sorted_keys)
     unique = np.unique(sorted_keys)
-    assert result[0] == len(unique)
+    assert result[0] == len(unique) * KEY_BYTE_SIZE
     np.testing.assert_array_equal(result[DATA_START:DATA_START + len(unique)], unique)
     # Slots past the unique keys are not written.
     assert np.all(result[DATA_START + len(unique):] == GUARD_VALUE)

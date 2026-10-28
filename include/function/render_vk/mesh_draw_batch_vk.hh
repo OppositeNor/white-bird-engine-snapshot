@@ -20,6 +20,7 @@
 #include "function/render_vk/vertex_input_description_vk.hh"
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -27,7 +28,8 @@ namespace WhiteBirdEngine {
 
 /**
  * @struct MeshDrawBatchVK
- * @brief One range of a compiled mesh's indexed-indirect commands whose draws share one vertex layout. Copyable and movable.
+ * @brief One range of a compiled mesh's indexed-indirect commands whose draws share one vertex layout and pipeline variant.
+ * Copyable and movable.
  *
  * The batch is independent of any shader: it records the mesh's vertex layout, and a pipeline's vertex input requirement
  * is matched against it when the batch is drawn; see resolve_vertex_input().
@@ -54,6 +56,11 @@ struct MeshDrawBatchVK {
      * parallel to vertex_bindings. Command vertex offsets are relative to these bases.
      */
     std::vector<VertexBufferBindingVK> vertex_buffers;
+    /**
+     * @brief The pipeline variant of every draw's material; a draw task draws the batch with the pipeline it maps the
+     * variant to.
+     */
+    std::string pipeline_variant;
 
     /**
      * @brief Match a pipeline's vertex input requirement against the batch's vertex layout.

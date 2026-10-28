@@ -18,6 +18,7 @@
 struct DescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "keys", "read_write")] uint2 keys;
     [WBE_DESCRIPTOR("storage_buffer", "dispatch_buffer", "write")] uint2 dispatch_buffer;
+    [WBE_PUSH_CONSTANT("frame_slot")] uint shader_debug_frame_slot;
 };
 
 [vk::push_constant]
@@ -28,10 +29,11 @@ ConstantBuffer<DescriptorIndices> descriptor_indices;
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void main() {
-    RWStructuredBuffer<uint> keys = ResourceDescriptorHeap[descriptor_indices.keys.x];
+    uint frame_slot = descriptor_indices.shader_debug_frame_slot;
+    CountedBuffer<uint> keys = CountedBuffer<uint>(descriptor_indices.keys, frame_slot);
     RWStructuredBuffer<uint> dispatch_buffer = ResourceDescriptorHeap[descriptor_indices.dispatch_buffer.x];
-    uint key_count = keys[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX];
-    keys[WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX] = radix_sort_local_sort_num(key_count);
+    uint key_count = keys.size();
+    keys.set_header(WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX, radix_sort_local_sort_num(key_count));
     dispatch_buffer[0] = dedup_large_group_num(key_count);
     dispatch_buffer[1] = 1;
     dispatch_buffer[2] = 1;

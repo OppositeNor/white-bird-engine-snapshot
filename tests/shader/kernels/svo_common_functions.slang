@@ -14,12 +14,12 @@
 */
 /**
  * @file svo_common_functions.slang
- * @brief Test module exposing the SVO common, deferred-list, and dynamic-type helpers to slangpy calls.
+ * @brief Test module exposing the SVO common and deferred-list helpers to slangpy calls.
  * @details svo/svo_common.slang relies on utils/utils.slang without including it, so this module includes both.
  * Helpers taking an SVONode are wrapped to take its packed children_data. No defines are required.
  */
 #include "utils/utils.slang"
-#include "svo/svo_dynamic_types.slang"
+#include "svo/svo_common.slang"
 
 /**
  * @brief Decodes the ChildrenState of a node with the given packed description.
@@ -37,6 +37,15 @@ uint svo_children_index(uint p_children_data) {
     SVONode node;
     node.children_data = p_children_data;
     return get_svo_children_index(node);
+}
+
+/**
+ * @brief Counts the occupied sectors of a node with the given packed description.
+ */
+uint svo_count_children_occupancy(uint p_children_data) {
+    SVONode node;
+    node.children_data = p_children_data;
+    return node.count_children_occupancy();
 }
 
 /**

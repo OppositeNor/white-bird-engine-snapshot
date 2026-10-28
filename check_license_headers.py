@@ -27,6 +27,7 @@ LICENSE_HEADER_FILE_EXTENSIONS = {
     ".cmake",
     ".jinja",
     ".toml",
+    ".tl",
 }
 
 LICENSE_HEADER_FILE_NAMES = {

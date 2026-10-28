@@ -14,8 +14,15 @@
 include = []
 
 [[resources]]
-id = "svogi_injection"
+id = "svogi_occupancy_injection"
 source_type = "shader"
-src = "assets/shaders/svogi/svogi_injection.slang"
-dst = "assets/shaders/svogi/svogi_injection.spv"
-metadata = "assets/shaders/svogi/svogi_injection.json"
+src = "assets/shaders/svogi/svogi_occupancy_injection.slang"
+dst = "assets/shaders/svogi/svogi_occupancy_injection.spv"
+metadata = "assets/shaders/svogi/svogi_occupancy_injection.json"
+
+[[resources]]
+id = "svogi_radiance_injection"
+source_type = "shader"
+src = "assets/shaders/svogi/svogi_radiance_injection.slang"
+dst = "assets/shaders/svogi/svogi_radiance_injection.spv"
+metadata = "assets/shaders/svogi/svogi_radiance_injection.json"

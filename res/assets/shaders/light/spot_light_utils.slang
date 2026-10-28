@@ -83,6 +83,8 @@ struct LightParamDescriptorIndices {
     uint2 shadowmap_sampler;
 };
 
+// Structured-buffer matrices use ordinary mul(). The uniform-buffer scalar-load workaround
+// transposes these matrices and must not be applied to this returned value.
 SpotLightInfo get_spot_light_info(uint2 p_light_infos, uint p_spot_light_index) {
     StructuredBuffer<SpotLightInfoBuffer> light_infos = ResourceDescriptorHeap[p_light_infos.x];
     return light_infos[0].spot_light_info[p_spot_light_index];
@@ -187,6 +189,63 @@ struct SpotLight {
      */
     float3 shadow_texel_world_position(float2 p_texel_uv, float p_shadow_depth) {
         return spot_shadow_texel_world_position(info, p_texel_uv, p_shadow_depth);
+    }
+
+    /**
+     * @brief Reconstruct the world position stored in the shadow-map texel containing a UV.
+     * @details Loads the first shadow moment of the texel from mip level zero and reconstructs the position at the texel
+     * center, as the two-argument overload does.
+     * @param p_uv Shadow-map UV in [0, 1]; a UV of 1 selects the last texel.
+     * @return World-space position of the surface seen by the texel.
+     */
+    float3 shadow_texel_world_position(float2 p_uv) {
+        uint2 shadow_size = get_shadow_size();
+        uint2 texel = min(uint2(p_uv * float2(shadow_size)), shadow_size - 1);
+        float2 texel_uv = (float2(texel) + 0.5) / float2(shadow_size);
+        float shadow_depth = shadow_moments.Load(int3(int2(texel), 0)).x;
+        return shadow_texel_world_position(texel_uv, shadow_depth);
+    }
+
+    /**
+     * @brief Sample the shadow moments with shadowmap_sampler.
+     * @details Mip levels above zero exist only while the light binds the moments' mip chain, that is, without
+     * WBE_USE_SUMMED_AREA_TABLE_SHADOW_MOMENTS.
+     * @param p_uv Shadow-map UV.
+     * @param p_mip Mip level to sample; fractional levels blend between neighboring levels.
+     * @return The sampled first and second moments.
+     */
+    float2 sample_shadow_moments(float2 p_uv, float p_mip = 0.0) {
+        return shadow_moments.SampleLevel(shadowmap_sampler, p_uv, p_mip);
+    }
+
+#if WBE_USE_SUMMED_AREA_TABLE_SHADOW_MOMENTS
+    /**
+     * @brief Sample the summed-area table of the shadow moments with shadowmap_sampler.
+     * @param p_uv Shadow-map UV.
+     * @return The sampled inclusive prefix sums of the first and second moments.
+     */
+    float2 sample_shadow_moments_summed_area_table(float2 p_uv) {
+        return shadow_moments_summed_area_table.SampleLevel(shadowmap_sampler, p_uv, 0.0);
+    }
+#endif
+
+    /**
+     * @brief Sample the reflective shadow-map flux with shadowmap_sampler.
+     * @param p_uv Shadow-map UV.
+     * @return The sampled flux.
+     */
+    float4 sample_rsm_flux(float2 p_uv) {
+        return rsm_flux.SampleLevel(shadowmap_sampler, p_uv, 0.0);
+    }
+
+    /**
+     * @brief Sample the reflective shadow-map octahedron-encoded world normals with shadowmap_sampler.
+     * @details The encoded value is filtered as is; filtering across an octahedron fold blends unrelated normals.
+     * @param p_uv Shadow-map UV.
+     * @return The sampled octahedron-encoded normal.
+     */
+    float2 sample_rsm_octa_normal(float2 p_uv) {
+        return rsm_octa_normal.SampleLevel(shadowmap_sampler, p_uv, 0.0);
     }
 
 #if WBE_USE_SUMMED_AREA_TABLE_SHADOW_MOMENTS

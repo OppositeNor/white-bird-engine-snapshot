@@ -85,7 +85,7 @@ RTParamsGraphicsDrawMeshVK DynamicMeshRenderFeature::make_draw_params(
     size_t p_entity_index, std::string_view p_pipeline_key, const RendExtent2DParamsVK& p_extent) const {
     return RTParamsGraphicsDrawMeshVK{
         .mesh = std::string(DYNAMIC_MESH_KEY),
-        .pipeline = std::string(p_pipeline_key),
+        .pipeline = RTParamsGraphicsDrawMeshVK::make_default_pipeline(p_pipeline_key),
         .parts = {MeshPartVK::OPAQUE},
         .transform = get_entity_transform_id(p_entity_index),
         .render_extent = p_extent,

@@ -287,6 +287,15 @@ function render_graph.clamp_to_edge_sampler(p_id: string, p_params?: wbe.RendSam
     return owned_resource({ id = p_id, sampler = params }, "sampler")
 end
 
+-- Pipelines are render-database resources the application compiles under p_key.
+function render_graph.compute_pipeline(p_key: string): render_graph.Resource
+    return database_resource(p_key, "WhiteBirdEngine::ROComputePipelineVK")
+end
+
+function render_graph.graphics_pipeline(p_key: string): render_graph.Resource
+    return database_resource(p_key, "WhiteBirdEngine::ROGraphicsPipelineVK")
+end
+
 -- External resources are supplied by C++; a repeated import handle with the same id denotes the same import.
 function render_graph.import_resource(p_id: string): render_graph.Resource
     validate_id(p_id)
@@ -382,11 +391,11 @@ function render_graph.graph(): render_graph.Graph
     end
 
     function graph:add_compute_pipeline(p_key: string): render_graph.Resource
-        return database_resource(p_key, "WhiteBirdEngine::ROComputePipelineVK")
+        return render_graph.compute_pipeline(p_key)
     end
 
     function graph:add_graphics_pipeline(p_key: string): render_graph.Resource
-        return database_resource(p_key, "WhiteBirdEngine::ROGraphicsPipelineVK")
+        return render_graph.graphics_pipeline(p_key)
     end
 
     -- Graph handles describe resources lazily and may be shared with other graph descriptions.

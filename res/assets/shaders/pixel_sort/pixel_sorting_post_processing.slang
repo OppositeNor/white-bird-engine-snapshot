@@ -15,7 +15,7 @@
 /**
  * @file pixel_sorting_post_processing.slang
  * @brief Compute pass that applies general post-processing effects to the pixel-sorted image.
- * @details Dispatch one 8x8 workgroup per 8x8 pixel tile of the sorted image. Every invocation writes one output pixel,
+ * @details Dispatch one 16x16 workgroup per 16x16 pixel tile of the sorted image. Every invocation writes one output pixel,
  * and may read any pixel of the sorted image, so effects that sample neighbors, such as blurs, are allowed. The effects
  * belong in post_process(); it currently applies gamma correction.
  */
@@ -39,7 +39,7 @@ struct PixelSortingPostProcessingDescriptorIndices {
     [WBE_DESCRIPTOR("storage_image", "pixel_sorting_post_processing_output", "write")] uint2 output;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<PixelSortingPostProcessingDescriptorIndices> descriptor_indices;
 
 /**
@@ -62,7 +62,7 @@ float4 post_process(Texture2D<float4> p_sorted_image,
 }
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_dispatch_thread_id : SV_DispatchThreadID) {
     Texture2D<float4> sorted_image = ResourceDescriptorHeap[descriptor_indices.sorted_image.x];
     SamplerState sorted_sampler = SamplerDescriptorHeap[descriptor_indices.sorted_sampler.x];

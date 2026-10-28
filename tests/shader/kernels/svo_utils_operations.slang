@@ -55,11 +55,11 @@ void main(uint3 p_dispatch_thread_id : SV_DispatchThreadID) {
     }
 #if OPERATION == OPERATION_RESERVE_NODES
     uint children_index;
-    bool succeeded = try_reserve_svo_nodes(tree_info, 0, children_index);
+    bool succeeded = try_reserve_svo_nodes(nodes, tree_info, 0, children_index);
     results[index] = uint4(succeeded ? 1 : 0, children_index, 0, 0);
 #elif OPERATION == OPERATION_RESERVE_LEAVES
     uint children_index;
-    bool succeeded = try_reserve_svo_leaves(tree_info, 0, children_index);
+    bool succeeded = try_reserve_svo_leaves(leaves, tree_info, 0, children_index);
     results[index] = uint4(succeeded ? 1 : 0, children_index, 0, 0);
 #elif OPERATION == OPERATION_CREATE_CHILDREN_NODE
     uint children_index;

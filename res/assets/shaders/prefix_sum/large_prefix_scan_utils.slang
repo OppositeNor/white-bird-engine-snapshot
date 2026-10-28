@@ -81,7 +81,7 @@ void large_prefix_scan_blocks(RWStructuredBuffer<uint> p_data, RWStructuredBuffe
         p_scratch[thread_data_start + i] = element < element_count ? p_data[WBE_LARGE_PREFIX_SCAN_DATA_START + element] : 0;
     }
     GroupMemoryBarrierWithGroupSync();
-    workgroup_inclusive_prefix_sum_64_256(p_scratch, thread_data_start);
+    workgroup_inclusive_prefix_sum_64_256<uint, Add<uint>>(p_scratch, thread_data_start);
     [unroll] for (uint i = 0; i < 4; ++i) {
         uint element = block_start + thread_data_start + i;
         if (element < element_count) {
@@ -111,7 +111,7 @@ void large_prefix_scan_sections(RWStructuredBuffer<uint> p_data, RWStructuredBuf
     uint blocks_per_section = large_prefix_scan_blocks_per_section(block_num);
     uint section_begin = min(p_section * blocks_per_section, block_num);
     uint section_end = min(section_begin + blocks_per_section, block_num);
-    uint total = workgroup_general_prefix_sum<WBE_LARGE_PREFIX_SCAN_WORKGROUP_SIZE>(p_sections,
+    uint total = workgroup_general_prefix_sum<uint, Add<uint>, WBE_LARGE_PREFIX_SCAN_WORKGROUP_SIZE>(p_sections,
         WBE_LARGE_PREFIX_SCAN_BLOCK_TOTALS_START + section_begin, section_end - section_begin, p_thread_id, p_scratch);
     if (p_thread_id == 0) {
         p_sections[WBE_LARGE_PREFIX_SCAN_SECTION_TOTALS_START + p_section] = total;
@@ -134,7 +134,7 @@ void large_prefix_scan_totals(RWStructuredBuffer<uint> p_sections, uint p_thread
         p_scratch[thread_data_start + i] = p_sections[WBE_LARGE_PREFIX_SCAN_SECTION_TOTALS_START + thread_data_start + i];
     }
     GroupMemoryBarrierWithGroupSync();
-    workgroup_inclusive_prefix_sum_64_256(p_scratch, thread_data_start);
+    workgroup_inclusive_prefix_sum_64_256<uint, Add<uint>>(p_scratch, thread_data_start);
     [unroll] for (uint i = 0; i < 4; ++i) {
         p_sections[WBE_LARGE_PREFIX_SCAN_SECTION_TOTALS_START + thread_data_start + i] = p_scratch[thread_data_start + i];
     }

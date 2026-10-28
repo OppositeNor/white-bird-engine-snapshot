@@ -32,7 +32,7 @@ struct PresentPixelSortDescriptorIndices {
     [WBE_DESCRIPTOR("sampler", "pixel_sort_sampler")] uint2 sorted_sampler;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<PresentPixelSortDescriptorIndices> descriptor_indices;
 
 [shader("vertex")]

@@ -67,7 +67,7 @@ struct DrawSkinnedMeshDescriptorIndices {
     uint2 skinning_transforms;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DrawSkinnedMeshDescriptorIndices> descriptor_indices;
 
 /**
@@ -84,9 +84,10 @@ SkinnedMeshVSOutput vertex_main(SkinnedMeshVertexInput p_input) {
     joint_binding.joint_weights = p_input.joint_weights;
     SkinningTransform skinning_transform = evaluate_skinning_transform(skinning_transforms, joint_binding);
     float3 model_position = transform_skinned_point(skinning_transform, p_input.position);
-    float4 view_position = mul(camera_info.view, float4(model_position, 1.0));
+    float4 view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.view), float4(model_position, 1.0));
     SkinnedMeshVSOutput output;
-    output.position = mul(camera_info.proj, view_position);
+    output.position = software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.proj), view_position);
     output.model_position = model_position;
     return output;
 }

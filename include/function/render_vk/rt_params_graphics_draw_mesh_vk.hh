@@ -15,13 +15,16 @@
 #ifndef WBE_FILE_RT_PARAMS_GRAPHICS_DRAW_MESH_VK_HH
 #define WBE_FILE_RT_PARAMS_GRAPHICS_DRAW_MESH_VK_HH
 
+#include "core/data/data_value.hh"
 #include "core/reflection/reflection_defs.hh"
+#include "function/render/render_resource_unit.hh"
 #include "function/render_vk/mesh_resources_vk.hh"
 #include "function/render_vk/rend_extent_2d_params_vk.hh"
 #include "function/render_vk/rt_params_clear_value_vk.hh"
 #include "function/render_vk/vulkan_enums_vk.hh"
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace WhiteBirdEngine {
@@ -39,10 +42,16 @@ struct WBE_META(WBE_SERIALIZABLE_STATIC, WBE_STRICT_DESERIALIZATION, WBE_REFLECT
     WBE_META(WBE_REFLECT, WBE_REFLECT_REQUIRED, WBE_RECIPE_RESOURCE(database, MeshResourcesVK))
     std::string mesh;
     /**
-     * @brief Resource key of the compiled graphics pipeline in the renderer's RenderDatabase.
+     * @brief Map from material pipeline variants to the resource keys of the compiled graphics pipelines in the renderer's
+     * RenderDatabase that draw them; materials without a pipeline_variant use MATERIAL_PIPELINE_VARIANT_DEFAULT.
+     *
+     * The map needs at least one entry. Every pipeline must render to the same targets, and the pipelines that read the
+     * material table must share one material texture contract. Drawing a material whose variant has no pipeline throws; a
+     * variant no material uses is allowed. make_default_pipeline() builds the map of a task that draws every material with
+     * one pipeline.
      */
     WBE_META(WBE_REFLECT, WBE_REFLECT_REQUIRED, WBE_RECIPE_RESOURCE(database, ROGraphicsPipelineVK))
-    std::string pipeline;
+    DataValue pipeline;
     /**
      * @brief Parts of the mesh the task draws, in draw order; at least one, each at most once.
      */
@@ -74,6 +83,17 @@ struct WBE_META(WBE_SERIALIZABLE_STATIC, WBE_STRICT_DESERIALIZATION, WBE_REFLECT
      */
     WBE_META(WBE_REFLECT)
     AttachmentLoadOpVK depth_load_op = AttachmentLoadOpVK::CLEAR;
+
+    /**
+     * @brief Make a pipeline map that draws the default pipeline variant with one pipeline.
+     * @param p_pipeline_key Resource key of the compiled graphics pipeline.
+     * @return The map { MATERIAL_PIPELINE_VARIANT_DEFAULT = p_pipeline_key }.
+     */
+    static DataValue make_default_pipeline(std::string_view p_pipeline_key) {
+        DataValue result = DataValue::make_map();
+        result.set_value(MATERIAL_PIPELINE_VARIANT_DEFAULT, std::string(p_pipeline_key));
+        return result;
+    }
 };
 
 } // namespace WhiteBirdEngine

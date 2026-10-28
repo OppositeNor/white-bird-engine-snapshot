@@ -1,0 +1,77 @@
+# Copyright 2026 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "serializables_sd.gen.hh"
+template = "serializables_sd.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+static_serializables = ".static_serializables"
+strict_deserializations = ".strict_deserializations"
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "enum_reflection.gen.hh"
+template = "enum_reflection.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+reflected_enums = ".reflected_enums"
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "serializables_access.gen.hh"
+template = "serializables_access.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+static_serializables = ".static_serializables"
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "serializable_factory.gen.hh"
+template = "serializable_factory.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+serializables = ".serializables"
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "label_manager.gen.hh"
+template = "label_manager.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+static_labels = ".static_labels"
+dynamic_labels = ".dynamic_labels"
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "type_uuid.gen.hh"
+template = "type_uuid.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+
+[[generate]]
+out_dir = "${include_dir}/per_target/${build_target}/generated"
+output_name = "cla_configuration.gen.hh"
+template = "cla_configuration.hh.jinja"
+
+[generate.data]
+metadata = ".metadata"
+cla_configurations = ".cla_configurations"

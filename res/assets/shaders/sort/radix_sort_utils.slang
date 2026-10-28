@@ -16,6 +16,7 @@
 #define WBE_FILE_SORT_SLANG
 
 #include "utils/utils.slang"
+#include "utils/counted_buffer.slang"
 #include "prefix_sum/prefix_sum_utils.slang"
 
 #define WBE_RADIX_SORT_BUCKET_BIT_SIZE 8
@@ -32,9 +33,8 @@
 // size. Past WBE_RADIX_SORT_MAX_WORKGROUP_COUNT local sorts, each local sort owns more elements instead.
 #define WBE_RADIX_SORT_ELEMENTS_PER_WORKGROUP 256
 #define WBE_RADIX_SORT_MAX_WORKGROUP_COUNT 16384
-// The first entries of the radix sort key buffers are metadata: the element count, then the number of local sorts.
-#define WBE_RADIX_SORT_DATA_START 4
-#define WBE_RADIX_SORT_ELEMENT_COUNT_INDEX 0
+// The radix sort key buffers are counted buffers whose header also holds the number of local sorts, at header word
+// WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX.
 #define WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX 1
 
 // The histogram buffer holds the sub-histogram count at index 0, the start of the overflow histograms at index 1, and the
@@ -42,6 +42,8 @@
 #define WBE_RADIX_SORT_SUB_HISTOGRAM_NUM_INDEX 0
 #define WBE_RADIX_SORT_OVERFLOW_START_INDEX 1
 #define WBE_RADIX_SORT_LANE_START_INDEX 2
+// The sub-histograms start after the metadata of the histogram buffer.
+#define WBE_RADIX_SORT_LANE_START 4
 // The number of consecutive sub-histograms each histogram prefix scan workgroup scans in groupshared memory.
 #define WBE_RADIX_SORT_SCAN_HISTOGRAM_NUM 16
 #define WBE_RADIX_SORT_SCAN_ENTRY_NUM (WBE_RADIX_SORT_SCAN_HISTOGRAM_NUM * WBE_RADIX_SORT_BUCKET_COUNT)
@@ -207,7 +209,7 @@ void workgroup_radix_sort_step_64_256(__ref groupshared uint p_data[256],
     }
     GroupMemoryBarrierWithGroupSync();
     // Perform the prefix sum, to transform each entry of it to the histogram till the corresponding point.
-    workgroup_inclusive_prefix_sum_64_256(p_scratch, p_thread_id * 4);
+    workgroup_inclusive_prefix_sum_64_256<uint, Add<uint>>(p_scratch, p_thread_id * 4);
     // The last element is the workgroup histogram.
     uint histogram = p_scratch[255];
     // Exclusive prefix sum of the packed histogram

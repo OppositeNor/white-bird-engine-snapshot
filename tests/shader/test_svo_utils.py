@@ -69,8 +69,7 @@ def reset_svo(p_max_depth: int, p_node_capacity: int, p_leaf_capacity: int) -> S
     nodes["children_data"] = pack_children_data(STATE_EMPTY)
     nodes["data_index"][:8] = np.arange(8)
     nodes["parent_index"][:8] = -1
-    tree_info = make_tree_info(p_max_depth, p_node_capacity)
-    tree_info["max_leaves_count"] = p_leaf_capacity
+    tree_info = make_tree_info(p_max_depth)
     tree_info["node_count"] = 8
     tree_info["data_count"] = 8
     return SVOState(nodes, np.zeros(p_leaf_capacity, dtype=LEAF_DTYPE), tree_info, np.zeros(1, dtype=TRACE_DTYPE),

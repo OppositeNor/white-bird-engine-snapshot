@@ -30,7 +30,7 @@ struct SVODebugDrawSetupDescriptorIndices {
     uint2 indirect_draw;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVODebugDrawSetupDescriptorIndices> descriptor_indices;
 
 /**

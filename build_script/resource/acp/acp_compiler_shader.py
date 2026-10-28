@@ -171,11 +171,7 @@ class WBEACPCompilerShader(WBEACPCompiler):
                               output_file: Path, shader_metadata_file: Path,
                               shader_stage: str | None, entry_name: str | None,
                               macro_definitions: list[str]) -> None:
-        # TEMPORARY EXPERIMENT (pixel sort flicker): compile the sort shaders with the GLSL450 memory model, whose
-        # workgroup memory is coherent, to test whether private groupshared accesses under vk_mem_model cause the race.
         profile = "spirv_1_6+spvDescriptorHeapEXT+vk_mem_model"
-        if shader_file.parent.name in ("sort", "pixel_sort"):
-            profile = "spirv_1_6+spvDescriptorHeapEXT"
         cmd = [
             slangc_path,
             "-target", "spirv",

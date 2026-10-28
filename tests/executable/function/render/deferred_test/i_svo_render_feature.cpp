@@ -121,12 +121,12 @@ void ISVORenderFeature::compile_pipelines(std::string_view p_shader_prefix, std:
 
 void ISVORenderFeature::create_resources() {
     svo_info = render_context->create_buffer(ROBufferVK::Builder().set_properties(sizeof(SVOInfo), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-    svo_nodes =
-        render_context->create_buffer(ROBufferVK::Builder().set_properties(sizeof(SVONode), SVO_MAX_NODE_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-    dynamic_leaves = render_context->create_buffer(ROBufferVK::Builder()
-                         .set_properties(sizeof(SVODynamicLeafBlock), SVO_MAX_DYNAMIC_LEAVES_COUNT / 8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-    svo_leaves =
-        render_context->create_buffer(ROBufferVK::Builder().set_properties(sizeof(SVOLeaf), SVO_MAX_LEAVES_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+    // The node buffer holds the static nodes followed by the dynamic nodes.
+    svo_nodes = render_context->create_buffer(
+        ROBufferVK::Builder().set_properties(sizeof(SVONode), SVO_MAX_NODE_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+    // The leaf buffer holds the static leaves followed by the dynamic leaves.
+    svo_leaves = render_context->create_buffer(ROBufferVK::Builder().set_properties(
+        sizeof(SVOLeaf), SVO_MAX_LEAVES_COUNT, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
     svo_debug_draw_index_buffer = create_initialized_buffer(
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VOXEL_DEBUG_CUBE_INDICES.data(), sizeof(VOXEL_DEBUG_CUBE_INDICES));
     const VkDrawIndexedIndirectCommand initial_debug_draw_command{
@@ -151,14 +151,10 @@ void ISVORenderFeature::initialize() {
         .origin = svo_volume.origin,
         .width = svo_volume.width,
         .max_depth = SVO_MAX_DEPTH,
-        .max_node_count = SVO_MAX_NODE_COUNT,
-        .max_leaves_count = SVO_MAX_LEAVES_COUNT,
         .node_count = 8,
         .leaves_count = 0,
         .data_count = 8,
         .max_deferred_task_count = SVO_MAX_DEFERRED_TASK_COUNT,
-        .max_dynamic_node_count = SVO_MAX_DYNAMIC_NODE_COUNT,
-        .max_dynamic_leaves_count = SVO_MAX_DYNAMIC_LEAVES_COUNT,
         .dynamic_node_count = 0,
         .dynamic_leaves_count = 0,
     };
@@ -204,10 +200,9 @@ void ISVORenderFeature::configure_recipe(
     params.dynamic_clear_group_count = (SVO_MAX_NODE_COUNT + 127) / 128;
     // The static publication runs one invocation per node, the dynamic one per static and dynamic node.
     params.static_publication_group_count = (SVO_MAX_NODE_COUNT + 63) / 64;
-    params.dynamic_publication_group_count = (SVO_MAX_NODE_COUNT + SVO_MAX_DYNAMIC_NODE_COUNT + 127) / 128;
+    params.dynamic_publication_group_count = (SVO_MAX_NODE_COUNT + 127) / 128;
     // Byte sizes of the scratch buffers the module declares, from the capacities svo_info records.
     params.buffer_sizes = SVOBufferSizes{
-        .dynamic_nodes = sizeof(SVONode) * SVO_MAX_DYNAMIC_NODE_COUNT,
         .deferred_list = sizeof(uint32_t) * SVO_DEFERRED_LIST_ELEMENT_COUNT,
         .pre_deferred_debug_info = sizeof(SVOInfo),
         .pre_deferred_debug_list = sizeof(uint32_t) * SVO_MAX_DEFERRED_TASK_COUNT,
@@ -216,11 +211,10 @@ void ISVORenderFeature::configure_recipe(
         params.static_build = RendRecipeTriggerVK{.event = std::string(p_inputs.static_build_event), .activate = p_inputs.static_build_pending};
     }
     // The buffers holding initial contents or state shared by both graphs; the module declares the per-frame scratch buffers.
-    const std::array<std::pair<std::string_view, const Ref<ROBufferVK>*>, 7> buffers{
+    const std::array<std::pair<std::string_view, const Ref<ROBufferVK>*>, 6> buffers{
         {
             {SVO_INFO, &svo_info},
             {SVO_NODE_BUFFER, &svo_nodes},
-            {SVO_DYNAMIC_LEAVES, &dynamic_leaves},
             {SVO_LEAF_BUFFER, &svo_leaves},
             {SVO_DEBUG_DRAW_INDEX_BUFFER, &svo_debug_draw_index_buffer},
             {SVO_DEBUG_DRAW_INDIRECT_BUFFER, &svo_debug_draw_indirect_buffer},

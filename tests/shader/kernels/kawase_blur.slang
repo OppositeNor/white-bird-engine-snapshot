@@ -24,7 +24,7 @@ SamplerState source_sampler;
 RWStructuredBuffer<float4> output;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_thread_id : SV_DispatchThreadID) {
     if (p_thread_id.x >= SOURCE_WIDTH || p_thread_id.y >= SOURCE_HEIGHT) {
         return;

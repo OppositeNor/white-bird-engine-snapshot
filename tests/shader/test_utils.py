@@ -27,6 +27,11 @@ def utils(device: spy.Device, shader_include_dir: Path) -> spy.Module:
     return spy.Module.load_from_file(device, str(shader_include_dir / "utils" / "utils.slang"))
 
 
+@pytest.fixture(scope="module")
+def flatten_functions(device: spy.Device) -> spy.Module:
+    return spy.Module.load_from_file(device, str(Path(__file__).parent / "kernels" / "flatten_index_functions.slang"))
+
+
 @pytest.fixture
 def rng() -> np.random.Generator:
     return np.random.default_rng(RANDOM_SEED)
@@ -68,6 +73,41 @@ def test_transform_static_normal(utils: spy.Module, rng: np.random.Generator) ->
     result = utils.transform_static_normal(spy.float4x4(transform), spy.float3(*normal))
     expected = transform[:3, :3] @ normal
     np.testing.assert_allclose([result.x, result.y, result.z], expected / np.linalg.norm(expected), atol=1e-5)
+
+
+def test_software_mul_float4x4_vector(utils: spy.Module, rng: np.random.Generator) -> None:
+    matrices = rng.normal(size=(SAMPLE_COUNT, 4, 4)).astype(np.float32)
+    vectors = rng.normal(size=(SAMPLE_COUNT, 4)).astype(np.float32)
+    rows = [np.ascontiguousarray(matrices[:, row]) for row in range(4)]
+    result = call(utils.software_mul_float4x4_vector, *rows, vectors)
+    np.testing.assert_allclose(result, np.einsum("nij,nj->ni", matrices, vectors), rtol=1e-5, atol=1e-5)
+
+
+def random_view_projection(p_rng: np.random.Generator) -> np.ndarray:
+    """A perspective projection times a random rigid view transform."""
+    near, far, focal = 0.1, 100.0, 1.5
+    projection = np.array([[focal, 0.0, 0.0, 0.0], [0.0, focal, 0.0, 0.0],
+        [0.0, 0.0, far / (far - near), -far * near / (far - near)], [0.0, 0.0, 1.0, 0.0]])
+    rotation, _ = np.linalg.qr(p_rng.normal(size=(3, 3)))
+    view = np.eye(4)
+    view[:3, :3] = rotation
+    view[:3, 3] = p_rng.normal(size=3)
+    return projection @ view
+
+
+def test_world_position_from_depth(utils: spy.Module, rng: np.random.Generator) -> None:
+    view_projection = random_view_projection(rng)
+    inverse_view_projection = np.linalg.inv(view_projection)
+    # Pick points in view space inside the frustum, then map them back to world space.
+    ndc = np.stack([rng.uniform(-1.0, 1.0, SAMPLE_COUNT), rng.uniform(-1.0, 1.0, SAMPLE_COUNT),
+        rng.uniform(0.05, 0.99, SAMPLE_COUNT), np.ones(SAMPLE_COUNT)], axis=1)
+    world = ndc @ inverse_view_projection.T
+    world = world[:, :3] / world[:, 3:]
+    uvs = (ndc[:, :2] * 0.5 + 0.5).astype(np.float32)
+    depths = ndc[:, 2].astype(np.float32)
+    rows = [np.tile(inverse_view_projection[row].astype(np.float32), (SAMPLE_COUNT, 1)) for row in range(4)]
+    result = call(utils.world_position_from_depth, uvs, depths, *rows)
+    np.testing.assert_allclose(result, world, rtol=1e-3, atol=1e-3)
 
 
 def test_chebyshev_upper_bound(utils: spy.Module, rng: np.random.Generator) -> None:
@@ -147,17 +187,29 @@ def test_morton_encode_3d(utils: spy.Module, rng: np.random.Generator) -> None:
     np.testing.assert_array_equal(result, expected)
 
 
+@pytest.mark.parametrize("p_extent", [(1, 1), (3, 5), (16, 8)])
+def test_flatten_index_2d(flatten_functions: spy.Module, rng: np.random.Generator, p_extent: tuple[int, int]) -> None:
+    width, height = p_extent
+    coordinates = np.stack([rng.integers(0, extent, SAMPLE_COUNT, dtype=np.uint32) for extent in p_extent], axis=1)
+    widths = np.full(SAMPLE_COUNT, width, dtype=np.uint32)
+    result = call(flatten_functions.flatten_2d, coordinates, widths)
+    # x varies fastest, as in a C-ordered [height][width] array.
+    expected = np.ravel_multi_index((coordinates[:, 1], coordinates[:, 0]), (height, width))
+    np.testing.assert_array_equal(result, expected.astype(np.uint32))
+    np.testing.assert_array_equal(call(flatten_functions.unflatten_2d, result, widths), coordinates)
+
+
 @pytest.mark.parametrize("p_extent", [(1, 1, 1), (3, 5, 7), (16, 8, 4)])
-def test_flatten_index_3d(utils: spy.Module, rng: np.random.Generator, p_extent: tuple[int, int, int]) -> None:
+def test_flatten_index_3d(flatten_functions: spy.Module, rng: np.random.Generator, p_extent: tuple[int, int, int]) -> None:
     width, height, depth = p_extent
     coordinates = np.stack([rng.integers(0, extent, SAMPLE_COUNT, dtype=np.uint32) for extent in p_extent], axis=1)
     widths = np.full(SAMPLE_COUNT, width, dtype=np.uint32)
     heights = np.full(SAMPLE_COUNT, height, dtype=np.uint32)
-    result = call(utils.flatten_index_3d, coordinates, widths, heights)
+    result = call(flatten_functions.flatten_3d, coordinates, widths, heights)
     # x varies fastest and z slowest, as in a C-ordered [depth][height][width] array.
     expected = np.ravel_multi_index((coordinates[:, 2], coordinates[:, 1], coordinates[:, 0]), (depth, height, width))
     np.testing.assert_array_equal(result, expected.astype(np.uint32))
-    np.testing.assert_array_equal(call(utils.unflatten_index_3d, result, widths, heights), coordinates)
+    np.testing.assert_array_equal(call(flatten_functions.unflatten_3d, result, widths, heights), coordinates)
 
 
 def test_morton_delta(utils: spy.Module, rng: np.random.Generator) -> None:
@@ -179,6 +231,18 @@ def test_z_order_swizzle_8x8(utils: spy.Module) -> None:
     expected_y = ((linear >> 1) & 1) | ((linear >> 2) & 2) | ((linear >> 3) & 4)
     np.testing.assert_array_equal(result, np.stack([expected_x, expected_y], axis=1) + np.array(group_id) * 8)
     assert len({tuple(pixel) for pixel in result}) == 64
+
+
+def test_z_order_swizzle_16x16(utils: spy.Module) -> None:
+    group_id = (3, 5)
+    threads = np.array([(x, y) for y in range(16) for x in range(16)], dtype=np.uint32)
+    groups = np.tile(np.array(group_id, dtype=np.uint32), (len(threads), 1))
+    result = call(utils.z_order_swizzle_16x16, groups, threads)
+    linear = threads[:, 1] * 16 + threads[:, 0]
+    expected_x = sum(((linear >> (2 * bit)) & 1) << bit for bit in range(4))
+    expected_y = sum(((linear >> (2 * bit + 1)) & 1) << bit for bit in range(4))
+    np.testing.assert_array_equal(result, np.stack([expected_x, expected_y], axis=1) + np.array(group_id) * 16)
+    assert len({tuple(pixel) for pixel in result}) == 256
 
 
 def test_random_range(utils: spy.Module, rng: np.random.Generator) -> None:

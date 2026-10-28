@@ -18,6 +18,7 @@ include = [
     "assets/shaders/shadowmap_spot/shadowmap_spot_shader.toml",
     "assets/shaders/kawase_blur/kawase_blur_shader.toml",
     "assets/shaders/max_downsample/max_downsample_shader.toml",
+    "assets/shaders/svogi/svogi.toml",
     "assets/materials/default_material.toml",
     "res_chunks/test_global_resources.toml",
 ]

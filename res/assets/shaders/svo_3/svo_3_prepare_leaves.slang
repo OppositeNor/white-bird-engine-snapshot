@@ -19,6 +19,7 @@
 struct DescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "svo_info", "read")] uint2 svo_info;
     [WBE_DESCRIPTOR("storage_buffer", "svo_deferred_list", "read_write")] uint2 deferred_list;
+    [WBE_PUSH_CONSTANT("frame_slot")] uint shader_debug_frame_slot;
 };
 
 [vk::push_constant]
@@ -31,7 +32,8 @@ ConstantBuffer<DescriptorIndices> descriptor_indices;
 [numthreads(1, 1, 1)]
 void main() {
     RWStructuredBuffer<SVOInfo> svo_info = ResourceDescriptorHeap[descriptor_indices.svo_info.x];
-    RWStructuredBuffer<uint> deferred_list = ResourceDescriptorHeap[descriptor_indices.deferred_list.x];
-    deferred_list[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX] =
-        min(deferred_list[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX], svo_info[0].max_deferred_task_count);
+    uint frame_slot = descriptor_indices.shader_debug_frame_slot;
+    CountedBuffer<uint> deferred_list =
+        CountedBuffer<uint>(descriptor_indices.deferred_list, frame_slot);
+    deferred_list.set_size(min(deferred_list.size(), svo_info[0].max_deferred_task_count));
 }

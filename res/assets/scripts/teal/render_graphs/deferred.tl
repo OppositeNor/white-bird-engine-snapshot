@@ -32,12 +32,12 @@ local ceil_div = math_utils.ceil_div
 
 -- VK_REMAINING_MIP_LEVELS: a view of every mip level from the base level on.
 local REMAINING_MIP_LEVELS = 4294967295
--- One workgroup per 8x8 tile of the lit images, which have the swap chain extent.
-local SCREEN_TILE_SIZE = 8
+-- One workgroup per 16x16 tile of the lit images, which have the swap chain extent.
+local SCREEN_TILE_SIZE = 16
 -- One invocation per shadow-map line in the summed-area-table passes.
 local SUMMED_AREA_TABLE_WORKGROUP_SIZE = 64
--- One workgroup per 8x8 tile of the bloom images.
-local BLOOM_TILE_SIZE = 8
+-- One workgroup per 16x16 tile of the bloom images.
+local BLOOM_TILE_SIZE = 16
 
 local record VoxelFeature
     -- The structure as a subgraph task, whose overlays draw on the target's color and depth.
@@ -121,26 +121,26 @@ local record Pipelines
     light_billboard: Graph.Resource
 end
 
-local function make_pipelines(p_graph: Graph.Graph): Pipelines
+local function make_pipelines(): Pipelines
     return {
-        shadow_opaque = p_graph:add_graphics_pipeline("deferred_shadow_opaque"),
-        shadow_double_sided = p_graph:add_graphics_pipeline("deferred_shadow_double_sided"),
-        shadow_dynamic = p_graph:add_graphics_pipeline("deferred_shadow_dynamic"),
-        gbuffer_opaque = p_graph:add_graphics_pipeline("deferred_gbuffer_opaque"),
-        gbuffer_double_sided = p_graph:add_graphics_pipeline("deferred_gbuffer_double_sided"),
-        gbuffer_dynamic = p_graph:add_graphics_pipeline("deferred_gbuffer_dynamic"),
-        shadow_sat_horizontal = p_graph:add_compute_pipeline("shadow_moments_summed_area_table_horizontal_shader"),
-        shadow_sat_vertical = p_graph:add_compute_pipeline("shadow_moments_summed_area_table_vertical_shader"),
-        direct_lighting = p_graph:add_compute_pipeline("direct_lighting_shader"),
-        direct_lighting_sat = p_graph:add_compute_pipeline("direct_lighting_summed_area_table_shader"),
-        indirect_lighting = p_graph:add_compute_pipeline("indirect_lighting_rsm_shader"),
-        indirect_lighting_debug_view = p_graph:add_compute_pipeline("indirect_lighting_rsm_debug_view_shader"),
-        combine_lighting = p_graph:add_compute_pipeline("combine_lighting_shader"),
-        extract_bloom = p_graph:add_compute_pipeline("bloom_shader_extract"),
-        blur_ping = p_graph:add_compute_pipeline("kawase_blur_pong_write_shader"),
-        blur_pong = p_graph:add_compute_pipeline("kawase_blur_ping_write_shader"),
-        present = p_graph:add_graphics_pipeline("present_post_processing"),
-        light_billboard = p_graph:add_graphics_pipeline("deferred_light_billboard_pipeline"),
+        shadow_opaque = Graph.graphics_pipeline("deferred_shadow_opaque"),
+        shadow_double_sided = Graph.graphics_pipeline("deferred_shadow_double_sided"),
+        shadow_dynamic = Graph.graphics_pipeline("deferred_shadow_dynamic"),
+        gbuffer_opaque = Graph.graphics_pipeline("deferred_gbuffer_opaque"),
+        gbuffer_double_sided = Graph.graphics_pipeline("deferred_gbuffer_double_sided"),
+        gbuffer_dynamic = Graph.graphics_pipeline("deferred_gbuffer_dynamic"),
+        shadow_sat_horizontal = Graph.compute_pipeline("shadow_moments_summed_area_table_horizontal_shader"),
+        shadow_sat_vertical = Graph.compute_pipeline("shadow_moments_summed_area_table_vertical_shader"),
+        direct_lighting = Graph.compute_pipeline("direct_lighting_shader"),
+        direct_lighting_sat = Graph.compute_pipeline("direct_lighting_summed_area_table_shader"),
+        indirect_lighting = Graph.compute_pipeline("indirect_lighting_rsm_shader"),
+        indirect_lighting_debug_view = Graph.compute_pipeline("indirect_lighting_rsm_debug_view_shader"),
+        combine_lighting = Graph.compute_pipeline("combine_lighting_shader"),
+        extract_bloom = Graph.compute_pipeline("bloom_shader_extract"),
+        blur_ping = Graph.compute_pipeline("kawase_blur_pong_write_shader"),
+        blur_pong = Graph.compute_pipeline("kawase_blur_ping_write_shader"),
+        present = Graph.graphics_pipeline("present_post_processing"),
+        light_billboard = Graph.graphics_pipeline("deferred_light_billboard_pipeline"),
     }
 end
 
@@ -299,7 +299,7 @@ local function add_mesh_draws(p_builder: Builder)
 
         tasks.run_shadow_opaque = graph:draw_mesh(light_id("run_shadow_opaque", light), {
             mesh = p_builder.static_mesh,
-            pipeline = p_builder.pipelines.shadow_opaque,
+            pipeline = { default = p_builder.pipelines.shadow_opaque },
             parts = { "opaque" },
             render_extent = shadow_extent,
             clear_values = clear_values,
@@ -312,7 +312,7 @@ local function add_mesh_draws(p_builder: Builder)
 
         tasks.run_shadow_double_sided = graph:draw_mesh(light_id("run_shadow_double_sided", light), {
             mesh = p_builder.static_mesh,
-            pipeline = p_builder.pipelines.shadow_double_sided,
+            pipeline = { default = p_builder.pipelines.shadow_double_sided },
             parts = { "double_sided" },
             render_extent = shadow_extent,
             clear_values = clear_values,
@@ -325,7 +325,7 @@ local function add_mesh_draws(p_builder: Builder)
 
         tasks.dynamic_shadow = graph:draw_mesh(light_id("dynamic_shadow", light), {
             mesh = p_builder.dynamic_mesh,
-            pipeline = p_builder.pipelines.shadow_dynamic,
+            pipeline = { default = p_builder.pipelines.shadow_dynamic },
             parts = { "opaque" },
             transform = graph:reference(dynamic_transforms[1]),
             render_extent = shadow_extent,
@@ -339,7 +339,7 @@ local function add_mesh_draws(p_builder: Builder)
 
         tasks.dynamic_shadow_second = graph:draw_mesh(light_id("dynamic_shadow_second", light), {
             mesh = p_builder.dynamic_mesh,
-            pipeline = p_builder.pipelines.shadow_dynamic,
+            pipeline = { default = p_builder.pipelines.shadow_dynamic },
             parts = { "opaque" },
             transform = graph:reference(dynamic_transforms[2]),
             render_extent = shadow_extent,
@@ -356,7 +356,7 @@ local function add_mesh_draws(p_builder: Builder)
 
     p_builder.tasks.run_gbuffer = graph:draw_mesh("run_gbuffer", {
         mesh = p_builder.static_mesh,
-        pipeline = p_builder.pipelines.gbuffer_opaque,
+        pipeline = { default = p_builder.pipelines.gbuffer_opaque },
         parts = { "opaque" },
         clear_values = gbuffer_clear_values,
         color_load_op = "clear",
@@ -369,7 +369,7 @@ local function add_mesh_draws(p_builder: Builder)
 
     p_builder.tasks.run_gbuffer_double_sided = graph:draw_mesh("run_gbuffer_double_sided", {
         mesh = p_builder.static_mesh,
-        pipeline = p_builder.pipelines.gbuffer_double_sided,
+        pipeline = { default = p_builder.pipelines.gbuffer_double_sided },
         parts = { "double_sided" },
         clear_values = gbuffer_clear_values,
         color_load_op = "load",
@@ -382,7 +382,7 @@ local function add_mesh_draws(p_builder: Builder)
 
     p_builder.tasks.dynamic_gbuffer = graph:draw_mesh("dynamic_gbuffer", {
         mesh = p_builder.dynamic_mesh,
-        pipeline = p_builder.pipelines.gbuffer_dynamic,
+        pipeline = { default = p_builder.pipelines.gbuffer_dynamic },
         parts = { "opaque" },
         transform = graph:reference(dynamic_transforms[1]),
         clear_values = {},
@@ -396,7 +396,7 @@ local function add_mesh_draws(p_builder: Builder)
 
     p_builder.tasks.dynamic_gbuffer_second = graph:draw_mesh("dynamic_gbuffer_second", {
         mesh = p_builder.dynamic_mesh,
-        pipeline = p_builder.pipelines.gbuffer_dynamic,
+        pipeline = { default = p_builder.pipelines.gbuffer_dynamic },
         parts = { "opaque" },
         transform = graph:reference(dynamic_transforms[2]),
         clear_values = {},
@@ -683,7 +683,7 @@ function exports.build(context: wbe.DeferredRecipeContext): wbe.RendGraphRecipeV
         resources = {},
         static_mesh = graph:add_mesh("static_mesh"),
         dynamic_mesh = graph:add_mesh("dynamic_mesh"),
-        pipelines = make_pipelines(graph),
+        pipelines = make_pipelines(),
         graph = graph,
         tasks = { indirect_lighting = {} },
         light_tasks = {},

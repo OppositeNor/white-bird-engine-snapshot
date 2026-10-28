@@ -23,11 +23,11 @@ struct BloomExtractDescriptorIndices {
 static const float BLOOM_THRESHOLD = 1.0;
 static const float BLOOM_THRESHOLD_EPSILON = 0.0001;
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<BloomExtractDescriptorIndices> descriptor_indices;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThreadID) {
     Texture2D<float4> bloom_input = ResourceDescriptorHeap[descriptor_indices.bloom_input.x];
     RWTexture2D<float4> bloom_output = ResourceDescriptorHeap[descriptor_indices.bloom_output.x];
@@ -35,7 +35,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
     uint width;
     uint height;
     bloom_output.GetDimensions(width, height);
-    uint2 dispatch_thread_id = z_order_swizzle_8x8(p_group_id.xy, p_group_thread_id.xy);
+    uint2 dispatch_thread_id = z_order_swizzle_16x16(p_group_id.xy, p_group_thread_id.xy);
     if (dispatch_thread_id.x >= width || dispatch_thread_id.y >= height) {
         return;
     }

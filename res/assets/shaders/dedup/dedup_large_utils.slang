@@ -45,15 +45,15 @@ uint dedup_large_group_num(uint p_key_count) {
  * @param p_marks The marks, one per key.
  * @param p_key The key to mark.
  */
-void dedup_large_mark(RWStructuredBuffer<uint> p_keys, RWStructuredBuffer<uint> p_marks, uint p_key) {
-    uint key_count = p_keys[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX];
+void dedup_large_mark(CountedBuffer<uint> p_keys, RWStructuredBuffer<uint> p_marks, uint p_key) {
+    uint key_count = p_keys.size();
     if (p_key >= key_count) {
         return;
     }
     if (p_key == 0) {
         p_marks[WBE_LARGE_PREFIX_SCAN_ELEMENT_COUNT_INDEX] = key_count;
     }
-    bool unique = p_key == 0 || p_keys[WBE_RADIX_SORT_DATA_START + p_key] != p_keys[WBE_RADIX_SORT_DATA_START + p_key - 1];
+    bool unique = p_key == 0 || p_keys.get(p_key) != p_keys.get(p_key - 1);
     p_marks[WBE_LARGE_PREFIX_SCAN_DATA_START + p_key] = unique ? 1 : 0;
 }
 
@@ -67,18 +67,18 @@ void dedup_large_mark(RWStructuredBuffer<uint> p_keys, RWStructuredBuffer<uint> 
  * @param p_unique_keys The unique keys.
  * @param p_key The key to write.
  */
-void dedup_large_scatter(RWStructuredBuffer<uint> p_keys, RWStructuredBuffer<uint> p_mark_offsets,
-        RWStructuredBuffer<uint> p_unique_keys, uint p_key) {
-    uint key_count = p_keys[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX];
+void dedup_large_scatter(CountedBuffer<uint> p_keys, RWStructuredBuffer<uint> p_mark_offsets,
+        CountedBuffer<uint> p_unique_keys, uint p_key) {
+    uint key_count = p_keys.size();
     if (p_key >= key_count) {
         return;
     }
     if (p_key == 0) {
-        p_unique_keys[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX] = p_mark_offsets[WBE_LARGE_PREFIX_SCAN_DATA_START + key_count - 1];
+        p_unique_keys.set_size(p_mark_offsets[WBE_LARGE_PREFIX_SCAN_DATA_START + key_count - 1]);
     }
-    uint key = p_keys[WBE_RADIX_SORT_DATA_START + p_key];
-    if (p_key == 0 || key != p_keys[WBE_RADIX_SORT_DATA_START + p_key - 1]) {
-        p_unique_keys[WBE_RADIX_SORT_DATA_START + p_mark_offsets[WBE_LARGE_PREFIX_SCAN_DATA_START + p_key] - 1] = key;
+    uint key = p_keys.get(p_key);
+    if (p_key == 0 || key != p_keys.get(p_key - 1)) {
+        p_unique_keys.set(p_mark_offsets[WBE_LARGE_PREFIX_SCAN_DATA_START + p_key] - 1, key);
     }
 }
 

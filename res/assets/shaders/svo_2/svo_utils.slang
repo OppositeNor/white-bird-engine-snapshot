@@ -40,12 +40,13 @@ void occupy_svo_leaf(RWStructuredBuffer<SVONode> p_nodes, uint p_node_index, flo
  * @brief Reserves an eight-node block or reports capacity exhaustion to shader validation.
  * @details Uses one atomic add. Capacity and packed-index bounds are checked only when shader debugging is enabled.
  */
-bool try_reserve_svo_nodes(RWStructuredBuffer<SVOInfo> p_tree_info, uint p_frame_slot, out uint p_children_index) {
+bool try_reserve_svo_nodes(RWStructuredBuffer<SVONode> p_nodes, RWStructuredBuffer<SVOInfo> p_tree_info, uint p_frame_slot,
+    out uint p_children_index) {
     uint current_count;
     InterlockedAdd(p_tree_info[0].node_count, 8, current_count);
     WBE_SHADER_DEBUG_ASSERT(current_count / 8 <= SVO_CHILDREN_BLOCK_INDEX_MASK &&
-        current_count <= p_tree_info[0].max_node_count &&
-        p_tree_info[0].max_node_count - current_count >= 8,
+        current_count <= get_svo_node_capacity(p_nodes) &&
+        get_svo_node_capacity(p_nodes) - current_count >= 8,
         ShaderDebugError::SVO_NODE_INDEX_OVERFLOW, p_frame_slot);
     p_children_index = current_count;
     return true;
@@ -59,7 +60,7 @@ bool create_svo_children_node(RWStructuredBuffer<SVONode> p_nodes,
     uint p_parent_node_index,
     uint p_frame_slot,
     out uint p_children_index) {
-    if (!try_reserve_svo_nodes(p_tree_info, p_frame_slot, p_children_index)) {
+    if (!try_reserve_svo_nodes(p_nodes, p_tree_info, p_frame_slot, p_children_index)) {
         return false;
     }
     [unroll] for (uint i = 0; i < 8; ++i) {
@@ -80,12 +81,13 @@ bool create_svo_children_node(RWStructuredBuffer<SVONode> p_nodes,
  * @brief Reserves an eight-leaf block or reports capacity exhaustion to shader validation.
  * @details Uses one atomic add. Capacity and packed-index bounds are checked only when shader debugging is enabled.
  */
-bool try_reserve_svo_leaves(RWStructuredBuffer<SVOInfo> p_tree_info, uint p_frame_slot, out uint p_children_index) {
+bool try_reserve_svo_leaves(RWStructuredBuffer<SVOLeaf> p_leaves, RWStructuredBuffer<SVOInfo> p_tree_info, uint p_frame_slot,
+    out uint p_children_index) {
     uint current_count;
     InterlockedAdd(p_tree_info[0].leaves_count, 8, current_count);
     WBE_SHADER_DEBUG_ASSERT(current_count / 8 <= SVO_CHILDREN_BLOCK_INDEX_MASK &&
-        current_count <= p_tree_info[0].max_leaves_count &&
-        p_tree_info[0].max_leaves_count - current_count >= 8,
+        current_count <= get_svo_leaf_capacity(p_leaves) &&
+        get_svo_leaf_capacity(p_leaves) - current_count >= 8,
         ShaderDebugError::SVO_LEAF_INDEX_OVERFLOW, p_frame_slot);
     p_children_index = current_count;
     return true;
@@ -99,7 +101,7 @@ bool create_svo_children_leaf(RWStructuredBuffer<SVOLeaf> p_leaves,
     uint p_parent_node_index,
     uint p_frame_slot,
     out uint p_children_index) {
-    if (!try_reserve_svo_leaves(p_tree_info, p_frame_slot, p_children_index)) {
+    if (!try_reserve_svo_leaves(p_leaves, p_tree_info, p_frame_slot, p_children_index)) {
         return false;
     }
     [unroll] for (uint i = 0; i < 8; ++i) {
@@ -159,13 +161,13 @@ bool try_voxel_allocate(RWStructuredBuffer<SVONode> p_nodes, RWStructuredBuffer<
     uint node_index = p_trace_info.node_index;
     uint curr_depth = p_trace_info.curr_depth;
     WBE_SHADER_DEBUG_ASSERT(p_tree_info[0].max_depth >= 2 &&
-        p_tree_info[0].max_node_count >= 8 &&
-        p_tree_info[0].max_leaves_count != 0,
+        get_svo_node_capacity(p_nodes) >= 8 &&
+        get_svo_leaf_capacity(p_leaves) != 0,
         ShaderDebugError::SVO_SHALLOWER_THAN_EXPECTED, p_frame_slot);
     for (int depth = 0; p_trace_info.remain_depth < 0 || depth < p_trace_info.remain_depth; ++depth) {
         WBE_SHADER_DEBUG_ASSERT(curr_depth < p_tree_info[0].max_depth,
             ShaderDebugError::SVO_DEEPER_THAN_EXPECTED, p_frame_slot);
-        WBE_SHADER_DEBUG_ASSERT(node_index < p_tree_info[0].max_node_count,
+        WBE_SHADER_DEBUG_ASSERT(node_index < get_svo_node_capacity(p_nodes),
             ShaderDebugError::SVO_NODE_INDEX_OVERFLOW, p_frame_slot);
         SVONode node = load_svo_node(p_nodes, node_index);
         if (get_svo_children_state(node) == SVONode::ChildrenState::EMPTY) {
@@ -183,8 +185,8 @@ bool try_voxel_allocate(RWStructuredBuffer<SVONode> p_nodes, RWStructuredBuffer<
             // A node, keep on looking deeper.
             WBE_SHADER_DEBUG_ASSERT(curr_depth < p_tree_info[0].max_depth - 1,
                 ShaderDebugError::SVO_DEEPER_THAN_EXPECTED, p_frame_slot);
-            WBE_SHADER_DEBUG_ASSERT(get_svo_children_index(node) <= p_tree_info[0].max_node_count &&
-                p_tree_info[0].max_node_count - get_svo_children_index(node) >= 8,
+            WBE_SHADER_DEBUG_ASSERT(get_svo_children_index(node) <= get_svo_node_capacity(p_nodes) &&
+                get_svo_node_capacity(p_nodes) - get_svo_children_index(node) >= 8,
                 ShaderDebugError::SVO_NODE_INDEX_OVERFLOW, p_frame_slot);
             break;
         case SVONode::ChildrenState::LEAF:
@@ -193,8 +195,8 @@ bool try_voxel_allocate(RWStructuredBuffer<SVONode> p_nodes, RWStructuredBuffer<
                 ShaderDebugError::SVO_SHALLOWER_THAN_EXPECTED, p_frame_slot);
             WBE_SHADER_DEBUG_ASSERT(curr_depth <= p_tree_info[0].max_depth - 1,
                 ShaderDebugError::SVO_DEEPER_THAN_EXPECTED, p_frame_slot);
-            WBE_SHADER_DEBUG_ASSERT(get_svo_children_index(node) <= p_tree_info[0].max_leaves_count &&
-                p_tree_info[0].max_leaves_count - get_svo_children_index(node) >= 8,
+            WBE_SHADER_DEBUG_ASSERT(get_svo_children_index(node) <= get_svo_leaf_capacity(p_leaves) &&
+                get_svo_leaf_capacity(p_leaves) - get_svo_children_index(node) >= 8,
                 ShaderDebugError::SVO_LEAF_INDEX_OVERFLOW, p_frame_slot);
             occupy_svo_leaf(p_nodes, node_index, p_trace_info.svo_position);
             return true;

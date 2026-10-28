@@ -14,7 +14,7 @@
 */
 #include "utils/utils.slang"
 #include "svo/svo_utils.slang"
-#include "svo/svo_dynamic_read.slang"
+#include "svo/svo.slang"
 
 struct SVODebugDrawDescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "svo_info", "read")]
@@ -23,16 +23,6 @@ struct SVODebugDrawDescriptorIndices {
     uint2 tree_nodes;
     [WBE_DESCRIPTOR("storage_buffer", "svo_leaf_buffer", "read")]
     uint2 tree_leaves;
-    /**
-     * @brief Descriptor-heap reference to svo_dynamic_nodes.
-     */
-    [WBE_DESCRIPTOR("storage_buffer", "svo_dynamic_nodes", "read")]
-    uint2 dynamic_nodes;
-    /**
-     * @brief Descriptor-heap reference to svo_dynamic_leaves.
-     */
-    [WBE_DESCRIPTOR("storage_buffer", "svo_dynamic_leaves", "read")]
-    uint2 dynamic_leaves;
 
     [WBE_DESCRIPTOR("uniform_buffer", "gbuffer_camera_info")]
     uint2 camera_info;
@@ -54,7 +44,7 @@ struct SVODebugDrawVertexOutput {
     float4 color : COLOR0;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVODebugDrawDescriptorIndices> descriptor_indices;
 
 /**
@@ -65,33 +55,31 @@ SVODebugDrawVertexOutput vertex_main(uint p_vertex_id : SV_VulkanVertexID, uint 
     StructuredBuffer<SVOInfo> svo_info_buffer = ResourceDescriptorHeap[descriptor_indices.svo_info.x];
     StructuredBuffer<SVONode> tree_nodes = ResourceDescriptorHeap[descriptor_indices.tree_nodes.x];
     StructuredBuffer<SVOLeaf> tree_leaves = ResourceDescriptorHeap[descriptor_indices.tree_leaves.x];
-    StructuredBuffer<SVONode> dynamic_nodes = ResourceDescriptorHeap[descriptor_indices.dynamic_nodes.x];
-    StructuredBuffer<SVODynamicLeafBlock> dynamic_leaves = ResourceDescriptorHeap[descriptor_indices.dynamic_leaves.x];
     ConstantBuffer<CameraInfo> camera_info = ResourceDescriptorHeap[descriptor_indices.camera_info.x];
     SVOInfo svo_info = svo_info_buffer[0];
+    SVO svo = SVO(tree_nodes, tree_leaves, svo_info, true);
 
     uint3 corner = uint3((p_vertex_id >> 2) & 1, (p_vertex_id >> 1) & 1, p_vertex_id & 1);
-    bool is_bounds = p_instance_id == (svo_info.leaves_count + svo_info.dynamic_leaves_count);
+    bool is_bounds = p_instance_id == svo.get_total_leaves();
     float3 world_position;
     if (is_bounds) {
         world_position = svo_info.origin + float3(corner) * svo_info.width;
     }
     else {
-        if (!is_incremental_leaf_occupied(
-                p_instance_id, tree_nodes, tree_leaves, dynamic_nodes, dynamic_leaves, svo_info, descriptor_indices.shader_debug_frame_slot)) {
+        if (!svo.is_leaf_occupied(p_instance_id, descriptor_indices.shader_debug_frame_slot)) {
             SVODebugDrawVertexOutput empty_output;
             empty_output.position = float4(2.0, 2.0, 2.0, 1.0);
             empty_output.color = float4(0.0);
             return empty_output;
         }
-        uint3 leaf_grid_position =
-            get_leaf_grid_position(p_instance_id, tree_nodes, dynamic_nodes, tree_leaves, dynamic_leaves, svo_info, descriptor_indices.shader_debug_frame_slot);
+        uint3 leaf_grid_position = svo.get_leaf_grid_position(p_instance_id, descriptor_indices.shader_debug_frame_slot);
         float voxel_width = svo_info.width / float(1u << svo_info.max_depth);
         world_position = svo_info.origin + float3(leaf_grid_position + corner) * voxel_width;
     }
-    float4 view_position = mul(camera_info.view, float4(world_position, 1.0));
+    float4 view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.view), float4(world_position, 1.0));
     SVODebugDrawVertexOutput output;
-    output.position = mul(camera_info.proj, view_position);
+    output.position = software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.proj), view_position);
     output.color = is_bounds ? float4(1.0, 0.0, 0.0, 1.0) : float4(1.0);
     return output;
 }

@@ -105,7 +105,7 @@ struct SVODescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVODescriptorIndices> descriptor_indices;
 
 /**
@@ -219,7 +219,9 @@ void geometry_main(triangle VSOutput p_input[3], inout TriangleStream<GSOutput> 
  */
 [shader("fragment")]
 void fragment_main(GSOutput p_input) {
-    RWStructuredBuffer<uint> deferred_list = ResourceDescriptorHeap[descriptor_indices.deferred_list.x];
+    uint frame_slot = descriptor_indices.shader_debug_frame_slot;
+    CountedBuffer<uint> deferred_list =
+        CountedBuffer<uint>(descriptor_indices.deferred_list, frame_slot);
     RWStructuredBuffer<SVOInfo> svo_info_buffer = ResourceDescriptorHeap[descriptor_indices.svo_info.x];
     // Helper invocations cannot publish storage writes and receive undefined atomic results.
     // Keep them out of allocation retry loops; this shader does not need derivatives.
@@ -243,10 +245,13 @@ void fragment_main(GSOutput p_input) {
     // Get the voxel index according to the center, and get the morton code.
     uint voxel_morton_code = morton_encode_3d(uint3(center));
     uint leaf_index;
-    InterlockedAdd(deferred_list[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX], 1, leaf_index);
+    bool fits = deferred_list.try_atomic_expand(1, leaf_index);
     WBE_SHADER_DEBUG_ASSERT(leaf_index < svo_info_buffer[0].max_deferred_task_count,
         ShaderDebugError::SVO_DEFERRED_TASK_INDEX_OVERFLOW, descriptor_indices.shader_debug_frame_slot);
-    deferred_list[WBE_RADIX_SORT_DATA_START + leaf_index] = voxel_morton_code;
+    // svo_3_prepare_leaves clamps the count of leaves that do not fit.
+    if (fits) {
+        deferred_list.set(leaf_index, voxel_morton_code);
+    }
 }
 
 #endif

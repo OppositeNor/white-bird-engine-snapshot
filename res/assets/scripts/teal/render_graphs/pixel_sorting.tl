@@ -21,7 +21,7 @@
 -- Imported tasks: `draw_imgui`, the application's ImGui overlay, drawn after `present_sorted_pixels`.
 
 -- Must match the numthreads of write_sorted_pixels.slang and pixel_sorting_post_processing.slang.
-local PIXEL_SORT_TILE_SIZE = 8
+local PIXEL_SORT_TILE_SIZE = 16
 -- Must match the numthreads of count_pixel_sort_mask.slang and register_pixel_sort_keys.slang, which run one invocation
 -- per line.
 local PIXEL_SORT_COLUMN_WORKGROUP_SIZE = 64
@@ -94,25 +94,25 @@ local record Resources
     post_processing_params: Graph.Resource
 end
 
-local function make_resources(p_graph: Graph.Graph, p_layout: Layout): Resources
+local function make_resources(p_layout: Layout): Resources
     local width = p_layout.width
     local height = p_layout.height
     return {
-        column_offsets = p_graph:add_storage_buffer("pixel_sort_column_offsets", (PIXEL_SORT_COLUMN_OFFSETS_START + p_layout.line_count) * UINT32_SIZE),
-        destination = p_graph:add_storage_image("pixel_sort_destination_image", "r16g16b16a16_sfloat", width, height)
+        column_offsets = Graph.storage_buffer("pixel_sort_column_offsets", (PIXEL_SORT_COLUMN_OFFSETS_START + p_layout.line_count) * UINT32_SIZE),
+        destination = Graph.storage_image("pixel_sort_destination_image", "r16g16b16a16_sfloat", width, height)
             :view("pixel_sort_destination"),
         -- The screenshot reads the result back through a transfer.
-        post_processing_output = p_graph:add_storage_image("pixel_sorting_post_processing_output_image", "r16g16b16a16_sfloat",
+        post_processing_output = Graph.storage_image("pixel_sorting_post_processing_output_image", "r16g16b16a16_sfloat",
             width, height, { "transfer_src" }):view("pixel_sorting_post_processing_output"),
         -- Stores each masked pixel's rank within its line, with 0xFFFF marking unmasked pixels.
-        mask = p_graph:add_storage_image("pixel_sort_mask_image", "r16_uint", width, height):view("pixel_sort_mask"),
-        sampler = p_graph:add_clamp_to_edge_sampler("pixel_sort_sampler"),
+        mask = Graph.storage_image("pixel_sort_mask_image", "r16_uint", width, height):view("pixel_sort_mask"),
+        sampler = Graph.clamp_to_edge_sampler("pixel_sort_sampler"),
         -- The register pass writes and the write pass reads the keys; size the sort for every masked pixel.
-        sort_buffers = sort.radix_sort_buffers(RADIX_SORT_BUFFER_NAMES, p_layout.element_count, p_graph),
-        swap_chain = p_graph:import_resource("swap_chain"),
-        source = p_graph:import_resource("pixel_sort_source"),
-        contrast = p_graph:import_resource("pixel_sort_contrast"),
-        post_processing_params = p_graph:import_resource("pixel_sorting_post_processing_params"),
+        sort_buffers = sort.radix_sort_buffers(RADIX_SORT_BUFFER_NAMES, p_layout.element_count),
+        swap_chain = Graph.import_resource("swap_chain"),
+        source = Graph.import_resource("pixel_sort_source"),
+        contrast = Graph.import_resource("pixel_sort_contrast"),
+        post_processing_params = Graph.import_resource("pixel_sorting_post_processing_params"),
     }
 end
 
@@ -203,7 +203,7 @@ local exports = {}
 function exports.build(context: wbe.PixelSortingRecipeContext): wbe.RendGraphRecipeVK
     local layout = make_layout(context)
     local graph = Graph.new()
-    local resources = make_resources(graph, layout)
+    local resources = make_resources(layout)
     local registration = add_key_registration(graph, layout, resources)
     local radix_sort = sort.add_radix_sort_task(graph, "radix_sort", resources.sort_buffers)
     local output = add_output(graph, layout, resources)

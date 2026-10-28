@@ -28,7 +28,7 @@ function exports.build(_context: wbe.RendRecipeContextVK): wbe.RendGraphRecipeVK
     local pipeline = graph:add_graphics_pipeline("draw_cube_unshaded_pipeline")
     graph:draw_mesh("run_static_mesh", {
         mesh = static_mesh,
-        pipeline = pipeline,
+        pipeline = { default = pipeline },
         parts = { "opaque" },
         clear_values = { { color = { 0.0, 0.0, 0.0, 0.0 } } },
     }, { uses = { camera_info } }):color_target(0, swap_chain)

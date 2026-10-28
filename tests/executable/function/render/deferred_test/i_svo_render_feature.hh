@@ -87,7 +87,6 @@ public:
 
     static constexpr std::string_view SVO_INFO = "svo_info";
     static constexpr std::string_view SVO_NODE_BUFFER = "svo_node_buffer";
-    static constexpr std::string_view SVO_DYNAMIC_LEAVES = "svo_dynamic_leaves";
     static constexpr std::string_view SVO_LEAF_BUFFER = "svo_leaf_buffer";
     static constexpr std::string_view SVO_DEBUG_DRAW_INDEX_BUFFER = "svo_debug_draw_index_buffer";
     static constexpr std::string_view SVO_DEBUG_DRAW_INDIRECT_BUFFER = "svo_debug_draw_indirect_buffer";
@@ -125,8 +124,8 @@ protected:
     Ref<ROComputePipelineVK> compile_compute_pipeline(std::string_view p_resource_id) const;
     static constexpr size_t SVO_MAX_DEPTH = 9;
     static constexpr size_t SVO_VOXEL_COUNT = (size_t{1} << SVO_MAX_DEPTH) * (size_t{1} << SVO_MAX_DEPTH) * (size_t{1} << SVO_MAX_DEPTH);
-    static constexpr size_t SVO_MAX_NODE_COUNT = SVO_VOXEL_COUNT / 64;
-    static constexpr size_t SVO_MAX_DYNAMIC_NODE_COUNT = SVO_MAX_NODE_COUNT;
+    // Shared by the static nodes and the dynamic nodes that follow them in the node buffer.
+    static constexpr size_t SVO_MAX_NODE_COUNT = SVO_VOXEL_COUNT / 32;
     static constexpr size_t SVO_MAX_DEFERRED_TASK_COUNT = SVO_VOXEL_COUNT / 8;
     // Each deferred list stores its entry count in element zero, followed by up to SVO_MAX_DEFERRED_TASK_COUNT entries.
     static constexpr size_t SVO_DEFERRED_LIST_ELEMENT_COUNT = SVO_MAX_DEFERRED_TASK_COUNT + 1;
@@ -177,8 +176,8 @@ private:
     static constexpr std::string_view GBUFFER_DEPTH_IMAGE_VIEW = "gbuffer_depth";
     static constexpr VkFormat GBUFFER_DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
     static constexpr size_t SVO_EXTENT = size_t{1} << SVO_MAX_DEPTH;
+    // Shared by the static leaves and the dynamic leaves that follow them in the leaf buffer.
     static constexpr size_t SVO_MAX_LEAVES_COUNT = SVO_VOXEL_COUNT / 8;
-    static constexpr size_t SVO_MAX_DYNAMIC_LEAVES_COUNT = SVO_MAX_LEAVES_COUNT / 1024;
     // A voxel can hold at most one unreturned eight-slot ticket; include transient overflow reservations.
     static_assert(SVO_VOXEL_COUNT <= (0xffffffffU - SVO_MAX_NODE_COUNT) / 8U);
     static_assert(SVO_VOXEL_COUNT <= (0xffffffffU - SVO_MAX_LEAVES_COUNT) / 8U);
@@ -187,20 +186,16 @@ private:
         glm::vec3 origin;
         float width;
         uint32_t max_depth;
-        uint32_t max_node_count;
-        uint32_t max_leaves_count;
         uint32_t node_count;
         uint32_t leaves_count;
         uint32_t data_count;
         uint32_t max_deferred_task_count;
-        uint32_t max_dynamic_node_count;
-        uint32_t max_dynamic_leaves_count;
         uint32_t dynamic_node_count;
         uint32_t dynamic_leaves_count;
     };
 
-    static_assert(sizeof(SVOInfo) == 60);
-    static_assert(offsetof(SVOInfo, dynamic_node_count) == 52);
+    static_assert(sizeof(SVOInfo) == 44);
+    static_assert(offsetof(SVOInfo, dynamic_node_count) == 36);
 
     struct SVONode {
         enum class ChildrenState {
@@ -212,7 +207,7 @@ private:
             NODE_DYNAMIC = 5,
             LEAF_DYNAMIC = 6,
         };
-        enum Subregion {
+        enum class Subregion {
             XYZ_000,
             XYZ_001,
             XYZ_010,
@@ -244,15 +239,7 @@ private:
         int32_t parent_index;
     };
 
-    struct SVODynamicLeafBlock {
-        uint32_t original_children_data;
-        SVOLeaf leaves[8];
-    };
-    static_assert(SVO_MAX_DYNAMIC_LEAVES_COUNT % 8 == 0 && SVO_MAX_DYNAMIC_LEAVES_COUNT <= (1U << 21U) * 8U);
-    static_assert(sizeof(SVODynamicLeafBlock) == 68);
-    static_assert(offsetof(SVODynamicLeafBlock, leaves) == 4);
     static_assert(offsetof(SVONode, original_children_data) == 12);
-    static_assert(SVO_MAX_NODE_COUNT + SVO_MAX_DYNAMIC_NODE_COUNT <= (1U << 21U) * 8U);
 
     // Deferred-list entries are uint32_t voxel indices packing max_depth bits per axis.
     static_assert(SVO_MAX_DEPTH <= 10);
@@ -267,7 +254,6 @@ private:
     VoxelVolume svo_volume;
     // Leaves the static construction untriggered, so the static scene is reset and rebuilt every frame.
     bool rebuild_static_every_frame;
-    Ref<ROBufferVK> dynamic_leaves;
     Ref<ROGraphicsPipelineVK> dynamic_build_pipeline;
     std::string shader_prefix;
     std::string dynamic_shader_prefix;

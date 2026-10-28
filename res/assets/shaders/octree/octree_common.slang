@@ -52,7 +52,6 @@ static const uint OCTREE_OCCUPANCY_DYNAMIC = 2;
 /**
  * @brief Immutable spatial configuration and debug capacities.
  */
-[WBE_DATA_TYPE]
 struct OctreeInfo {
     /**
      * @brief The origin of the octree in world space.

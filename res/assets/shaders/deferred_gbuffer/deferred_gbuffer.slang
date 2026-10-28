@@ -30,7 +30,7 @@ struct DeferredGBufferDescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DeferredGBufferDescriptorIndices> descriptor_indices;
 
 /**
@@ -51,8 +51,9 @@ VSOutput vertex_main(Vertex3DTexturedInput p_input, uint p_instance_id : SV_Vulk
     float3x3 direction_transform = (float3x3)node.transform;
 
     VSOutput output;
-    float4 view_position = mul(camera_info.view, world_position);
-    output.position = mul(camera_info.proj, view_position);
+    float4 view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.view), world_position);
+    output.position = software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.proj), view_position);
     output.world_position = float4(world_position.xyz, float(submesh.material_id));
     output.normal = transform_static_normal(node.normal_transform, p_input.normal);
     output.tangent = normalize(mul(direction_transform, p_input.tangent));

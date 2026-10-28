@@ -25,7 +25,7 @@ struct SVODeferredCountResetDescriptorIndices {
 #endif
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVODeferredCountResetDescriptorIndices> descriptor_indices;
 
 /**

@@ -98,7 +98,7 @@ struct OctreeBuildDescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<OctreeBuildDescriptorIndices> descriptor_indices;
 
 /**

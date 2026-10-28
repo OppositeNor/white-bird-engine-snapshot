@@ -23,7 +23,7 @@ Texture2D<float4> source;
 RWStructuredBuffer<float4> output;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_thread_id : SV_DispatchThreadID) {
     if (p_thread_id.x >= DESTINATION_WIDTH || p_thread_id.y >= DESTINATION_HEIGHT) {
         return;

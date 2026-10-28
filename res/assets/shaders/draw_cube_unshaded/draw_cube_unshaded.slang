@@ -49,7 +49,7 @@ struct DrawCubeUnshadedDescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DrawCubeUnshadedDescriptorIndices> descriptor_indices;
 
 /**
@@ -66,8 +66,9 @@ VSOutput vertex_main(Vertex3DUnshadedInput p_input, uint p_instance_id : SV_Vulk
     NodeData node = load_mesh_node(descriptor_indices.mesh, instance.node_index);
     float4 world_position = mul(node.transform, float4(p_input.position.xyz, 1.0));
     VSOutput output;
-    float4 view_position = mul(camera_info.view, world_position);
-    output.position = mul(camera_info.proj, view_position);
+    float4 view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.view), world_position);
+    output.position = software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(camera_info.proj), view_position);
     output.normal = transform_static_normal(node.normal_transform, p_input.normal);
     output.uv = p_input.uv;
     return output;
@@ -81,4 +82,16 @@ VSOutput vertex_main(Vertex3DUnshadedInput p_input, uint p_instance_id : SV_Vulk
 [shader("fragment")]
 float4 fragment_main(VSOutput p_input) : SV_Target0 {
     return float4(p_input.normal * 0.5 + 0.5, 1.0);
+}
+
+/**
+ * @brief Visualize the surface normal like fragment_main, tinted orange; drawn for materials of the "tinted" pipeline
+ * variant.
+ * @param p_input The interpolated vertex output.
+ * @return The tinted normal color.
+ */
+[shader("fragment")]
+float4 fragment_tinted_main(VSOutput p_input) : SV_Target0 {
+    const float3 normal_color = p_input.normal * 0.5 + 0.5;
+    return float4(normal_color * float3(1.0, 0.45, 0.1), 1.0);
 }

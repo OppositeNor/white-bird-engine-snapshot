@@ -37,7 +37,7 @@ struct MaskedShadowDescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<MaskedShadowDescriptorIndices> descriptor_indices;
 
 /**
@@ -54,8 +54,10 @@ MaskedShadowVSOutput vertex_main(Vertex3DTexturedInput p_input, uint p_instance_
     InstanceData instance = instances[p_instance_id];
     float4 world_position = mul(load_mesh_node(descriptor_indices.mesh, instance.node_index).transform, float4(p_input.position.xyz, 1.0));
     MaskedShadowVSOutput output;
-    float4 light_view_position = mul(light_camera_info.view, world_position);
-    output.position = mul(light_camera_info.proj, light_view_position);
+    float4 light_view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(light_camera_info.view), world_position);
+    output.position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(light_camera_info.proj), light_view_position);
     output.uv = p_input.uv;
     output.material_index = float(submeshes[instance.submesh_index].material_id);
     return output;

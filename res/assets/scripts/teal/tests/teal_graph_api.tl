@@ -45,7 +45,7 @@ function exports.build(): wbe.RendGraphRecipeVK
     })
     local draw = graph:draw("draw", { pipeline = draw_pipeline, draw_vertex_count = 3 })
     draw:color_target(0, color)
-    graph:draw_mesh("mesh", { mesh = mesh, pipeline = mesh_pipeline, parts = { "opaque" }, transform = buffer })
+    graph:draw_mesh("mesh", { mesh = mesh, pipeline = { default = mesh_pipeline }, parts = { "opaque" }, transform = buffer })
         :color_target(0, color)
     graph:draw_indirect("draw_indirect", { pipeline = draw_indirect_pipeline, index_buffer = buffer,
         indirect_buffer = buffer }):color_target(0, color)

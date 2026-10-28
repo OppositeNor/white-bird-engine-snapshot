@@ -117,7 +117,7 @@ function exports.build(_context: wbe.RendRecipeContextVK): wbe.RendGraphRecipeVK
     local camera_info = graph:import_resource("camera_info")
     graph:draw_mesh("run_static_mesh", {
         mesh = graph:add_mesh("model_cube_static.mesh"),
-        pipeline = graph:add_graphics_pipeline("draw_cube_unshaded_pipeline"),
+        pipeline = { default = graph:add_graphics_pipeline("draw_cube_unshaded_pipeline") },
         parts = { "opaque" },
     }, { uses = { camera_info } }):color_target(0, swap_chain)
     return graph:build()
@@ -146,6 +146,9 @@ Every resource method returns a `Graph.Resource` handle:
 
 Nothing is registered with the graph: `graph:build()` emits the resources reachable from task params, aliases, edges,
 `uses`, and ports, each once. Unused handles are omitted, and two different owned handles with the same id fail.
+The module exposes the same constructors as functions (`Graph.storage_buffer()`, `Graph.compute_pipeline()`,
+`Graph.graphics_pipeline()`, `Graph.import_resource()`, `Graph.indirect_dispatch()`, ...), so helpers that only build
+handles or dispatches take no graph.
 
 ```lua
 local albedo = graph:add_image("gbuffer_albedo_image", "image_render_target", formats.gbuffer_albedo):view("gbuffer_albedo")
@@ -307,8 +310,11 @@ Importing `render_graph_utils.render_graph_utils` also brings the types `Graph.G
 `Graph.RTParams<Name>VK`. For types only, import the generated declarations with
 `local type render_graph = require("render_graph_utils.render_graph")`.
 
-Other graph helpers live next to it: `render_graph_utils.sort` provides `radix_sort_buffers(names, max_count, graph?)` and
-`add_radix_sort_task(graph, id, buffers, queue_family?)`; `render_graph_utils.large_prefix_scan` and
+Other graph helpers live next to it: `render_graph_utils.sort` provides `radix_sort_buffers(names, max_count,
+key_type?)` and `add_radix_sort_task(graph, id, buffers, queue_family?, options?)`, which sort `uint` keys, or `uint2`
+keys ordered by `x` and then `y`, by every bit or by an `options` bit range of an even number of 8-bit digits (bits
+`[32, 64)` of `uint2` keys sort by `x` and carry `y` as a payload, which `add_radix_sort_key_value_task(graph, id, buffers,
+queue_family?)` does); `render_graph_utils.large_prefix_scan` and
 `render_graph_utils.dedup_large` provide dispatch sequences for a `run_compute_pipelines_sequential` task; and
 `render_graph_utils.svo_3` gathers and deduplicates the leaves of the third sparse voxel octree construction.
 

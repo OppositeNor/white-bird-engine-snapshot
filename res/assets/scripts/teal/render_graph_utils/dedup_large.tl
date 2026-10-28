@@ -18,7 +18,7 @@
 -- key its index among the unique keys, to which it is scattered. The application compiles the pipelines under their shader ids
 -- (dedup_large_prepare_dispatch, dedup_large_mark, dedup_large_scatter), and those of the radix sort (see
 -- render_graph_utils.sort) and the large prefix scan (see render_graph_utils.large_prefix_scan). The key buffer and the
--- unique keys hold the key count in their metadata, followed by the keys; see dedup_large_utils.slang.
+-- unique keys are counted buffers of the keys; see dedup_large_utils.slang and counted_buffer.slang.
 
 local Graph = require("render_graph_utils.render_graph_utils")
 local sort = require("render_graph_utils.sort")
@@ -52,38 +52,36 @@ end
 
 -- Graph-owned buffers sized to deduplicate up to p_max_element_count keys. The dispatches reference these handles, so
 -- the graph discovers their storage when it builds the recipe.
-function dedup_large.buffers(p_names: dedup_large.DedupLargeBufferNames, p_max_element_count: integer,
-    p_graph?: Graph.Graph): dedup_large.DedupLargeBuffers
-    local graph = p_graph or Graph.new()
+function dedup_large.buffers(p_names: dedup_large.DedupLargeBufferNames,
+    p_max_element_count: integer): dedup_large.DedupLargeBuffers
     local keys = p_names.keys
     local sort_buffers = sort.radix_sort_buffers({
         keys = keys,
         keys_swap = keys .. "_swap",
         histogram = keys .. "_histogram",
         dispatch = keys .. "_sort_dispatch",
-    }, p_max_element_count, graph)
+    }, p_max_element_count)
     return {
         keys = sort_buffers.keys,
         -- At most every key is unique.
-        unique_keys = graph:add_storage_buffer(p_names.unique_keys, large_prefix_scan.data_buffer_size(p_max_element_count)),
+        unique_keys = Graph.storage_buffer(p_names.unique_keys, large_prefix_scan.data_buffer_size(p_max_element_count)),
         sort = sort_buffers,
-        marks = graph:add_storage_buffer(keys .. "_marks", large_prefix_scan.data_buffer_size(p_max_element_count)),
+        marks = Graph.storage_buffer(keys .. "_marks", large_prefix_scan.data_buffer_size(p_max_element_count)),
         scan = large_prefix_scan.buffers({ sections = keys .. "_mark_sections", dispatch = keys .. "_mark_dispatch" },
-            p_max_element_count, graph),
-        dispatch = graph:add_buffer(keys .. "_dedup_dispatch", "buffer_indirect", DEDUP_LARGE_DISPATCH_BUFFER_SIZE),
+            p_max_element_count),
+        dispatch = Graph.buffer(keys .. "_dedup_dispatch", "buffer_indirect", DEDUP_LARGE_DISPATCH_BUFFER_SIZE),
     }
 end
 
 -- The dispatches that sort p_buffers.keys in place and write its unique keys to p_buffers.unique_keys, bound to the
 -- handles of p_buffers. Each pass follows the previous one, and the passes read the key count from the keys, so the count
 -- must be written before they run and must not exceed the maximum element count p_buffers was sized for.
-function dedup_large.dispatches(p_graph: Graph.Graph,
-    p_buffers: dedup_large.DedupLargeBuffers): {Graph.RTParamsComputeDispatchVK}
+function dedup_large.dispatches(p_buffers: dedup_large.DedupLargeBuffers): {Graph.RTParamsComputeDispatchVK}
     local keys = p_buffers.keys
     local marks = p_buffers.marks
     local dispatch = p_buffers.dispatch
     local dispatches: {Graph.RTParamsComputeDispatchVK} = {
-        { pipeline = p_graph:add_compute_pipeline("dedup_large_prepare_dispatch"),
+        { pipeline = Graph.compute_pipeline("dedup_large_prepare_dispatch"),
             aliases = { keys = keys, dispatch_buffer = dispatch } },
     }
     local function append(p_dispatches: {Graph.RTParamsComputeDispatchVK})
@@ -91,11 +89,11 @@ function dedup_large.dispatches(p_graph: Graph.Graph,
             dispatches[#dispatches + 1] = entry
         end
     end
-    append(sort.radix_sort_dispatches(p_graph, p_buffers.sort))
+    append(sort.radix_sort_dispatches(p_buffers.sort))
     dispatches[#dispatches + 1] =
-        p_graph:indirect_dispatch(p_graph:add_compute_pipeline("dedup_large_mark"), dispatch, 0, { keys = keys, marks = marks })
-    append(large_prefix_scan.dispatches(p_graph, marks, p_buffers.scan))
-    dispatches[#dispatches + 1] = p_graph:indirect_dispatch(p_graph:add_compute_pipeline("dedup_large_scatter"), dispatch,
+        Graph.indirect_dispatch(Graph.compute_pipeline("dedup_large_mark"), dispatch, 0, { keys = keys, marks = marks })
+    append(large_prefix_scan.dispatches(marks, p_buffers.scan))
+    dispatches[#dispatches + 1] = Graph.indirect_dispatch(Graph.compute_pipeline("dedup_large_scatter"), dispatch,
         0, { keys = keys, marks = marks, unique_keys = p_buffers.unique_keys })
     return dispatches
 end

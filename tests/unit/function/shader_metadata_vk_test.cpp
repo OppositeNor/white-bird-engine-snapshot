@@ -137,7 +137,7 @@ TEST(WBEShaderMetadataVKTest, PreservesWrappedTypeAttributesAndNames) {
                 "type": {
                     "kind": "parameterBlock",
                     "name": "MeshContractMetadata",
-                    "user_attributes": [{"name": "WBE_DATA_TYPE", "arguments": []}],
+                    "user_attributes": [{"name": "StructContract", "arguments": []}],
                     "fields": [
                         {
                             "name": "nodes",
@@ -147,7 +147,7 @@ TEST(WBEShaderMetadataVKTest, PreservesWrappedTypeAttributesAndNames) {
                                 "scalar_type": "structuredBuffer",
                                 "element_scalar_type": "struct",
                                 "user_attributes": [
-                                    {"name": "WBE_DATA_TYPE", "arguments": [{"kind": "string", "string_value": "custom_node"}]}
+                                    {"name": "StructContract", "arguments": [{"kind": "string", "string_value": "custom_node"}]}
                                 ]
                             },
                             "fields": [
@@ -174,7 +174,7 @@ TEST(WBEShaderMetadataVKTest, PreservesWrappedTypeAttributesAndNames) {
     EXPECT_EQ(parameter.type.kind, "parameterBlock");
     EXPECT_EQ(parameter.type.name, "MeshContractMetadata");
     ASSERT_EQ(parameter.type.user_attributes.size(), 1U);
-    EXPECT_EQ(parameter.type.user_attributes[0].name, "WBE_DATA_TYPE");
+    EXPECT_EQ(parameter.type.user_attributes[0].name, "StructContract");
     EXPECT_TRUE(parameter.type.user_attributes[0].arguments.empty());
 
     ASSERT_EQ(parameter.type.fields.size(), 1U);
@@ -182,7 +182,7 @@ TEST(WBEShaderMetadataVKTest, PreservesWrappedTypeAttributesAndNames) {
     EXPECT_EQ(nodes_field.type.kind, "resource");
     EXPECT_EQ(nodes_field.type.name, "NodeData");
     ASSERT_EQ(nodes_field.type.user_attributes.size(), 1U);
-    EXPECT_EQ(nodes_field.type.user_attributes[0].name, "WBE_DATA_TYPE");
+    EXPECT_EQ(nodes_field.type.user_attributes[0].name, "StructContract");
     ASSERT_EQ(nodes_field.type.user_attributes[0].arguments.size(), 1U);
     EXPECT_EQ(nodes_field.type.user_attributes[0].arguments[0].kind, "string");
     EXPECT_EQ(nodes_field.type.user_attributes[0].arguments[0].string_value, "custom_node");

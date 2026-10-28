@@ -21,7 +21,7 @@ struct ShadowMomentsVerticalDescriptorIndices {
     uint2 shadow_moments_summed_area_table_output;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<ShadowMomentsVerticalDescriptorIndices> descriptor_indices;
 
 /**

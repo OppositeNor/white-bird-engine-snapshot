@@ -20,13 +20,11 @@
 #include "core/job/job_buffer_ring_mpsc.hh"
 #include "core/memory/reference_strong.hh"
 #include "core/memory/unique.hh"
-#include "function/render/i_render_task.hh"
 #include "function/render/i_renderer.hh"
 #include "function/render/render_database.hh"
 #include "function/render/render_defs.hh"
 #include "function/render_vk/descriptor_heap_allocator_vk.hh"
 #include "function/render_vk/ktx_vulkan_device_info_vk.hh"
-#include "function/render_vk/render_graph_descriptor_vk.hh"
 #include "function/render_vk/render_graph_vk.hh"
 #include "function/render_vk/render_plugin_vk.hh"
 #include "function/render_vk/render_context_vk.hh"
@@ -71,7 +69,7 @@ public:
     /**
      * @brief The version of Vulkan will be used for the renderer.
      */
-    static constexpr uint32_t VULKAN_API_VERSION = VK_API_VERSION_1_3;
+    static constexpr uint32_t VULKAN_API_VERSION = VK_API_VERSION_1_4;
 
     /**
      * @brief The number of jobs that would be runned per frame.
@@ -299,7 +297,7 @@ private:
     // The currently active cached render graph.
     Ref<RenderGraphVK> active_graph;
 
-    std::vector<const char*> enabled_layers{
+    std::vector<const char*> enabled_layers{ // NOLINT
 #ifdef WBE_VK_ENABLE_VALIDATION
         "VK_LAYER_KHRONOS_validation"
 #endif
@@ -313,6 +311,7 @@ private:
         VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME,
         VK_KHR_SHADER_UNTYPED_POINTERS_EXTENSION_NAME,
         VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
+        VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME,
 
         // To make VK_IMAGE_LAYOUT_GENERAL works as well as other layouts.
         VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,

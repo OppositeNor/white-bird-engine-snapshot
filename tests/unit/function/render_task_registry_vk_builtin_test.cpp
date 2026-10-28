@@ -104,7 +104,7 @@ constexpr BuiltinTaskCase BUILTIN_TASK_CASES[] = {
         .params = R"({"pipeline": "p", "render_extent": {"swap_chain_scale": 0.5}, "clear_values": [{"color": [0, 0, 0, 1]}, {"depth": 1}],
                       "color_load_op": "load", "depth_load_op": "DONT_CARE", "draw_vertex_count": 6})",
     },
-    {.type = "graphics_draw_mesh", .params = R"({"mesh": "sponza", "pipeline": "p", "parts": ["opaque", "masked"]})"},
+    {.type = "graphics_draw_mesh", .params = R"({"mesh": "sponza", "pipeline": {"default": "p"}, "parts": ["opaque", "masked"]})"},
     {
         .type = "run_graphics_pipeline_indirect",
         .params = R"({"pipeline": "p", "index_buffer": "indices", "indirect_buffer": "commands", "draw_count": 3,

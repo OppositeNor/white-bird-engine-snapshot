@@ -41,6 +41,10 @@ TEST(WBEShaderDebugTest, ErrorNamesAreStable) {
         "OCTREE_DEBUG_NODE_LIST_OVERFLOW");
     EXPECT_EQ(EnumReflection<ShaderDebugError>::enum_to_string(ShaderDebugError::SVO_VOXEL_DATA_INDEX_OVERFLOW),
         "SVO_VOXEL_DATA_INDEX_OVERFLOW");
+    EXPECT_EQ(EnumReflection<ShaderDebugError>::enum_to_string(ShaderDebugError::COUNTED_BUFFER_OVERFLOW),
+        "COUNTED_BUFFER_OVERFLOW");
+    EXPECT_EQ(EnumReflection<ShaderDebugError>::enum_to_string(ShaderDebugError::COUNTED_BUFFER_UNALIGNED_SIZE),
+        "COUNTED_BUFFER_UNALIGNED_SIZE");
     EXPECT_FALSE(EnumReflection<ShaderDebugError>::try_enum_to_string(static_cast<ShaderDebugError>(UINT32_MAX)).has_value());
     EXPECT_THROW((void)EnumReflection<ShaderDebugError>::enum_to_string(static_cast<ShaderDebugError>(UINT32_MAX)), std::runtime_error);
 }

@@ -21,7 +21,7 @@ struct ShadowMomentsHorizontalDescriptorIndices {
     uint2 shadow_moments_horizontal_output;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<ShadowMomentsHorizontalDescriptorIndices> descriptor_indices;
 
 /**

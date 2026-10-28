@@ -15,34 +15,28 @@
 #ifndef WBE_FILE_SVO_2_DYNAMIC_BUILD_SLANG
 #define WBE_FILE_SVO_2_DYNAMIC_BUILD_SLANG
 #include "svo_2/svo_utils.slang"
-#include "svo/svo_dynamic_types.slang"
 
 /**
  * @brief Extends static topology using pass-published dynamic children and copy-on-write leaves.
- * @details Dynamic node links use virtual indices starting at max_node_count. Only the CAS owner
+ * @details Dynamic nodes are allocated after the static nodes in the node buffer. Only the CAS owner
  * initializes a block. All contenders retry after the publication dispatch; none read unfinished payloads.
  */
-bool try_dynamic_voxel_allocate(RWStructuredBuffer<SVONode> p_static_nodes,
-    RWStructuredBuffer<SVOLeaf> p_static_leaves,
-    RWStructuredBuffer<SVONode> p_dynamic_nodes,
-    RWStructuredBuffer<SVODynamicLeafBlock> p_dynamic_leaves,
+bool try_dynamic_voxel_allocate(RWStructuredBuffer<SVONode> p_nodes,
+    RWStructuredBuffer<SVOLeaf> p_leaves,
     RWStructuredBuffer<SVOInfo> p_info,
     inout SVONodeTraceInfo p_trace,
     uint p_frame_slot) {
-    uint static_capacity = p_info[0].max_node_count;
+    // Dynamic nodes follow the static nodes, whose count is fixed while dynamic construction runs.
+    uint dynamic_begin = p_info[0].node_count;
+    uint node_capacity = get_svo_node_capacity(p_nodes);
+    uint leaf_capacity = get_svo_leaf_capacity(p_leaves);
     for (int step = 0; p_trace.remain_depth < 0 || p_trace.remain_depth > 0; ++step) {
         uint node_index = p_trace.node_index;
-        bool is_static = node_index < static_capacity;
-        uint local_index = is_static ? node_index : node_index - static_capacity;
-        WBE_SHADER_DEBUG_ASSERT(is_static ? local_index < p_info[0].node_count : local_index < p_info[0].dynamic_node_count,
+        WBE_SHADER_DEBUG_ASSERT(node_index < dynamic_begin + p_info[0].dynamic_node_count,
             ShaderDebugError::SVO_NODE_INDEX_OVERFLOW,
             p_frame_slot);
         uint description;
-        if (is_static) {
-            InterlockedAdd(p_static_nodes[local_index].children_data, 0, description);
-        } else {
-            InterlockedAdd(p_dynamic_nodes[local_index].children_data, 0, description);
-        }
+        InterlockedAdd(p_nodes[node_index].children_data, 0, description);
         uint state = description >> SVO_CHILDREN_STATE_SHIFT;
         uint sector = get_svo_node_subregion(p_trace.svo_position);
         if (state == uint(SVONode::ChildrenState::NODE) || state == uint(SVONode::ChildrenState::NODE_DYNAMIC)) {
@@ -56,13 +50,7 @@ bool try_dynamic_voxel_allocate(RWStructuredBuffer<SVONode> p_static_nodes,
         }
         if (state == uint(SVONode::ChildrenState::LEAF_DYNAMIC)) {
             uint ignored;
-            if (is_static) {
-                InterlockedOr(
-                    p_static_nodes[local_index].children_data, 1u << (SVO_CHILDREN_OCCUPANCY_SHIFT + sector), ignored);
-            } else {
-                InterlockedOr(
-                    p_dynamic_nodes[local_index].children_data, 1u << (SVO_CHILDREN_OCCUPANCY_SHIFT + sector), ignored);
-            }
+            InterlockedOr(p_nodes[node_index].children_data, 1u << (SVO_CHILDREN_OCCUPANCY_SHIFT + sector), ignored);
             return true;
         }
         if (state == uint(SVONode::ChildrenState::ALLOCATING_DYNAMIC)) {
@@ -73,60 +61,56 @@ bool try_dynamic_voxel_allocate(RWStructuredBuffer<SVONode> p_static_nodes,
             p_frame_slot);
         uint original;
         uint allocating = uint(SVONode::ChildrenState::ALLOCATING_DYNAMIC) << SVO_CHILDREN_STATE_SHIFT;
-        if (is_static) {
-            InterlockedCompareExchange(p_static_nodes[local_index].children_data, description, allocating, original);
-        } else {
-            InterlockedCompareExchange(p_dynamic_nodes[local_index].children_data, description, allocating, original);
-        }
+        InterlockedCompareExchange(p_nodes[node_index].children_data, description, allocating, original);
         if (original != description) {
             return false;
         }
-        if (is_static) {
-            p_static_nodes[local_index].original_children_data = original;
-        } else {
-            p_dynamic_nodes[local_index].original_children_data = original;
-        }
+        p_nodes[node_index].original_children_data = original;
         bool is_leaf = p_trace.curr_depth == p_info[0].max_depth - 1;
         uint children;
         uint occupancy = 0;
         if (is_leaf) {
-            InterlockedAdd(p_info[0].dynamic_leaves_count, 8, children);
-            WBE_SHADER_DEBUG_ASSERT(
-                children < p_info[0].max_dynamic_leaves_count, ShaderDebugError::SVO_LEAF_INDEX_OVERFLOW, p_frame_slot);
-            uint block = children / 8;
-            p_dynamic_leaves[block].original_children_data = original;
+            uint dynamic_index;
+            InterlockedAdd(p_info[0].dynamic_leaves_count, 8, dynamic_index);
+            // Dynamic leaves follow the static leaves, whose count is fixed while dynamic construction runs, and share
+            // the leaf buffer's capacity with them.
+            children = p_info[0].leaves_count + dynamic_index;
+            WBE_SHADER_DEBUG_ASSERT(children <= leaf_capacity && leaf_capacity - children >= 8,
+                ShaderDebugError::SVO_LEAF_INDEX_OVERFLOW,
+                p_frame_slot);
             [unroll] for (uint i = 0; i < 8; ++i) {
                 SVOLeaf leaf;
                 if (state == uint(SVONode::ChildrenState::LEAF)) {
-                    leaf = p_static_leaves[(original & SVO_CHILDREN_BLOCK_INDEX_MASK) * 8 + i];
+                    leaf = p_leaves[(original & SVO_CHILDREN_BLOCK_INDEX_MASK) * 8 + i];
                 } else {
-                    leaf.data_index = p_info[0].data_count + p_info[0].max_dynamic_node_count + children + i;
+                    // Dynamic leaf data follows the data of every dynamic node the node buffer can hold.
+                    leaf.data_index =
+                        p_info[0].data_count + (node_capacity - dynamic_begin) + dynamic_index + i;
                     leaf.parent_index = int(node_index);
                 }
-                p_dynamic_leaves[block].leaves[i] = leaf;
+                p_leaves[children + i] = leaf;
             }
             occupancy = (original & SVO_CHILDREN_OCCUPANCY_MASK) | (1u << (SVO_CHILDREN_OCCUPANCY_SHIFT + sector));
         } else {
-            InterlockedAdd(p_info[0].dynamic_node_count, 8, children);
-            WBE_SHADER_DEBUG_ASSERT(
-                children < p_info[0].max_dynamic_node_count, ShaderDebugError::SVO_NODE_INDEX_OVERFLOW, p_frame_slot);
+            uint dynamic_index;
+            InterlockedAdd(p_info[0].dynamic_node_count, 8, dynamic_index);
+            // Dynamic nodes share the node buffer's capacity with the static nodes they follow.
+            children = dynamic_begin + dynamic_index;
+            WBE_SHADER_DEBUG_ASSERT(children <= node_capacity && node_capacity - children >= 8,
+                ShaderDebugError::SVO_NODE_INDEX_OVERFLOW,
+                p_frame_slot);
             [unroll] for (uint i = 0; i < 8; ++i) {
                 SVONode child;
                 child.children_data = uint(SVONode::ChildrenState::EMPTY) << SVO_CHILDREN_STATE_SHIFT;
-                child.data_index = p_info[0].data_count + children + i;
+                child.data_index = p_info[0].data_count + dynamic_index + i;
                 child.parent_index = int(node_index);
                 child.original_children_data = child.children_data;
-                p_dynamic_nodes[children + i] = child;
+                p_nodes[children + i] = child;
             }
-            children += static_capacity;
         }
         uint ignored;
         uint pending = allocating | occupancy | (children / 8);
-        if (is_static) {
-            InterlockedExchange(p_static_nodes[local_index].children_data, pending, ignored);
-        } else {
-            InterlockedExchange(p_dynamic_nodes[local_index].children_data, pending, ignored);
-        }
+        InterlockedExchange(p_nodes[node_index].children_data, pending, ignored);
         return false;
     }
     return true;

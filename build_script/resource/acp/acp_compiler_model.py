@@ -16,13 +16,14 @@ from pathlib import Path
 from typing import override
 from build_script.resource.acp.acp_compiler import ManifestResource, WBEACPCompiler
 
-from wbe_utils_model_compiler import TextureCompiler, WBEUtilsModelCompiler
+from wbe_utils_model_compiler import SDFCompiler, TextureCompiler, WBEUtilsModelCompiler
 
 class WBEACPCompilerModel(WBEACPCompiler):
     """The model compiler.
     """
-    def __init__(self, texture_compiler: TextureCompiler, cache_dir: Path | None = None) -> None:
-        self._utils_mesh_compiler = WBEUtilsModelCompiler(texture_compiler=texture_compiler, cache_dir=cache_dir)
+    def __init__(self, texture_compiler: TextureCompiler, sdf_compiler: SDFCompiler, cache_dir: Path | None = None) -> None:
+        self._utils_mesh_compiler = WBEUtilsModelCompiler(
+            texture_compiler=texture_compiler, cache_dir=cache_dir, sdf_compiler=sdf_compiler)
 
     @override
     def get_supported_resource_types(self) -> list[str]:

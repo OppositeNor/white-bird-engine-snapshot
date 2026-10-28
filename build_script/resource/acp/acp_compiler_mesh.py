@@ -18,14 +18,20 @@ import struct
 from typing import Any, override
 from build_script.resource.acp.acp_compiler import ManifestResource, WBEACPCompiler
 
+from wbe_utils_model_compiler import MeshSDFBuilder, SDFCompiler, SDFConfig
+
 
 class WBEACPCompilerMesh(WBEACPCompiler):
     """Compile hand-authored mesh source geometry into a runtime mesh and its binary sections.
 
-    Source submeshes have no instance data, so they are emitted as opaque submeshes drawn with one identity instance.
+    Source submeshes have no instance data, so they are emitted as opaque submeshes drawn with one identity instance. A mesh
+    whose sdf_config is enabled also emits its signed distance field, which requires every submesh to reference only
+    binaries compiled with the mesh.
     """
 
-    _SOURCE_ONLY_FIELDS = {"vertices_data", "indices_data", "geometry_output_dir", "_geometry_output_name", "source_type", "source_file"}
+    _SOURCE_ONLY_FIELDS = {
+        "vertices_data", "indices_data", "geometry_output_dir", "_geometry_output_name", "source_type", "source_file", "sdf_config",
+    }
     _SECTION_TYPES = {
         "position": "vec3",
         "normal": "vec3",
@@ -44,6 +50,9 @@ class WBEACPCompilerMesh(WBEACPCompiler):
     }
     _JOINT_BINDING_TYPES = {"joint_binding_ids": "ivec4", "joint_binding_weights": "vec4"}
     _LEGACY_VERTEX_FIELDS = ("vertices", "joint_bindings")
+
+    def __init__(self, p_sdf_compiler: SDFCompiler) -> None:
+        self._mesh_sdf_builder = MeshSDFBuilder(p_sdf_compiler)
 
     @override
     def get_supported_resource_types(self) -> list[str]:
@@ -65,6 +74,7 @@ class WBEACPCompilerMesh(WBEACPCompiler):
                 f"WBEACPCompilerMesh: mesh resources must declare geometry through submeshes in {manifest_path}."
             )
 
+        sdf_config = SDFConfig.parse(resource)
         result = self._copy_runtime_fields(resource)
         result.setdefault("type", "mesh")
         geometry_output_dir = resource.get("geometry_output_dir")
@@ -108,6 +118,11 @@ class WBEACPCompilerMesh(WBEACPCompiler):
                 "submeshes": result_submeshes,
                 "instances": [{"global_transform": list(self._IDENTITY_TRANSFORM)}],
             }
+        if sdf_config is not None:
+            # The SDF samples sit beside the mesh's geometry binaries.
+            sdf_output_dir = self._geometry_output_path(resource, manifest_path).parent
+            sibling_resources.extend(
+                self._mesh_sdf_builder.build(result, sibling_resources, sdf_config, res_output_dir, sdf_output_dir))
         return [result, *sibling_resources]
 
     def _to_mesh_submesh(self, submesh: ManifestResource) -> ManifestResource:

@@ -26,7 +26,7 @@ struct SVOResetDescriptorIndices {
     uint2 deferred_list_pong;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVOResetDescriptorIndices> descriptor_indices;
 
 /**

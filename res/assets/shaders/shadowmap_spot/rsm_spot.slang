@@ -41,7 +41,7 @@ struct RSMDescriptorIndices {
     MeshDescriptorIndices mesh;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<RSMDescriptorIndices> descriptor_indices;
 
 struct RSMFragmentOutput {
@@ -84,8 +84,10 @@ RSMVSOutput vertex_main(Vertex3DTexturedInput p_input, uint p_instance_id : SV_V
     float3x3 direction_transform = (float3x3)node.transform;
 
     RSMVSOutput output;
-    float4 light_view_position = mul(light_camera_info.view, world_position);
-    output.position = mul(light_camera_info.proj, light_view_position);
+    float4 light_view_position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(light_camera_info.view), world_position);
+    output.position =
+        software_mul_float4x4_vector(WBE_SOFTWARE_MATRIX_ROWS(light_camera_info.proj), light_view_position);
     output.world_position = world_position.xyz;
     output.normal = transform_static_normal(node.normal_transform, p_input.normal);
     output.tangent = normalize(mul(direction_transform, p_input.tangent));

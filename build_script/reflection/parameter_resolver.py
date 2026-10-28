@@ -23,7 +23,7 @@ class WBEParameterSource(ABC):
     """Abstract base for parameter value providers used by WBEParameterResolver.
 
     Implementations supply string values for named parameters referenced as
-    ${name} inside generate.json fields.
+    ${name} inside generate.toml fields.
     """
 
     @abstractmethod
@@ -74,7 +74,7 @@ class WBEParameterResolver:
 
     Sources are queried in declaration order; the first non-None result wins.
     Supports recursive traversal of nested dicts and lists so the entire
-    generate.json data tree can be resolved in one call.
+    generate.toml data tree can be resolved in one call.
 
     Args:
         sources: Ordered list of WBEParameterSource instances. First match wins.
@@ -115,7 +115,7 @@ class WBEParameterResolver:
             if self._strict:
                 raise ValueError(
                     f"Unresolved parameter: ${{{name}}}. "
-                    f"Declare it in the 'params' field of generate.json or pass it as a build-level source."
+                    f"Declare it in the 'params' field of generate.toml or pass it as a build-level source."
                 )
             return match.group(0)
 
@@ -130,7 +130,7 @@ class WBEParameterResolver:
 
         Args:
             value: Any value — a plain string, a nested dict, a list, or
-                   any other type from the generate.json data tree.
+                   any other type from the generate.toml data tree.
         Returns:
             Value with all string ${name} patterns resolved.
         """

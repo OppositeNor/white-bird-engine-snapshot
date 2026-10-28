@@ -31,7 +31,7 @@ struct SVOUpdateStatesDescriptorIndices {
     uint2 tree_nodes;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<SVOUpdateStatesDescriptorIndices> descriptor_indices;
 
 /**

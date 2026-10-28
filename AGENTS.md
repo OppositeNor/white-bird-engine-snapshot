@@ -116,6 +116,8 @@ For non-trivial implementation tasks:
 - Draw meshes with `graphics_draw_mesh` (`RTGraphicsDrawMeshVK`, or `RTGraphicsDrawMeshVK::add_to_graph()` in C++); do not
   assemble `RTRunGraphicsPipelineIndirectVK` mesh draws by hand. Register each compiled mesh in the render database under
   the graph id its draws name (`mesh`), which they import it under, so shared meshes are compiled and imported once.
+  `pipeline` maps material pipeline variants to pipelines (`pipeline = { default = ..., foliage = ... }`); draws batch per
+  variant, and the task's pipelines must share render targets and one material texture contract.
 - A rebuild callback may add to the descriptor `RendGraphRecipeBuilderVK::build()` returns, for parts not yet expressed
   in Lua (the deferred test adds its acceleration structure and dynamic mesh entities that way); keep everything else in
   the recipe.
@@ -279,11 +281,15 @@ Header / source naming: `snake_case.hh` / `snake_case.cpp`. Header guards: `WBE_
 - `scope` defaults to `global`. `global` resources compile for both deployment and tests; `test_only` resources compile only with tests enabled. Scope may be set on a manifest to skip its entire include tree, or on an individual resource. ACP validates scopes, filters before compiling, and removes scope from runtime manifests.
 - `wbe-utils-model-compiler` owns final mesh and material resource shaping. Keep `acp_compiler_model.py` limited to ACP path/schema
   adaptation; do not normalize compiled material textures in the ACP adapter.
+- Mesh SDFs (`sdf_config` on `model`, `static_geometry`, and `mesh`) are emitted by the model compiler's `MeshSDFBuilder`
+  for both mesh compilers; only the injected host `SDFCompiler` (`SDFCompilerMeshToSDF`, mesh-to-sdf) samples distances. Do
+  not sample SDFs anywhere else.
 
 ### Material Texture Contract
 
 - Materials do not have a `material_type`. Their graphics pipeline and its reflected shader metadata define the rendering
-  contract.
+  contract. A material may set a free-string `pipeline_variant` (`default` when absent); draw tasks map variants to compiled
+  pipelines, so materials never name pipelines or passes.
 - Every material texture slot has a non-empty, shader-defined `texture_role`; do not introduce a closed engine-side texture-role
   enum or whitelist.
 - Shader texture roles are declared on integer fields of the global `MaterialParams` struct with `WBE_TEXTURE` in `utils/utils.slang`.

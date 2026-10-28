@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
 import os
 from pathlib import Path
 import subprocess
+import tomllib
 import traceback
 from typing import Any
 from build_script import on_build
@@ -143,9 +143,9 @@ def _gather_license() -> None:
 def _gather_gen_infos() -> list[WBEGenFileInfo]:
     gen_infos: list[WBEGenFileInfo] = []
     for gen_info_file in build_config.gen_info_files:
-        with open(gen_info_file) as f:
-            data = json.load(f)
-        file_infos = [WBEGenFileInfo(**info) for info in data]
+        with open(gen_info_file, "rb") as f:
+            data = tomllib.load(f)
+        file_infos = [WBEGenFileInfo(**info) for info in data["generate"]]
         for file_info in file_infos:
             if not file_info.out_dir:
                 file_info.out_dir = os.path.dirname(gen_info_file)
@@ -164,7 +164,7 @@ if __name__ == "__main__":
             headers = build_config.project_headers
         else:
             headers = build_config.project_headers_exclude_tests
-        print("WBEBuilder: Gathering generate.json...")
+        print("WBEBuilder: Gathering generate.toml...")
         gen_infos = _gather_gen_infos()
 
         # Run reflection script. It runs before the ACP, which type-checks Teal scripts against the generated declarations.

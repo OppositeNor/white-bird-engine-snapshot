@@ -14,7 +14,6 @@
 */
 #include "utils/utils.slang"
 #include "svo/svo_utils.slang"
-#include "svo/svo_dynamic_types.slang"
 /**
  * @brief Descriptor-heap resources used by incremental maintenance.
  */
@@ -30,16 +29,6 @@ struct DynamicDescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "svo_node_buffer")]
     uint2 nodes;
     /**
-     * @brief Descriptor-heap reference to svo_dynamic_nodes.
-     */
-    [WBE_DESCRIPTOR("storage_buffer", "svo_dynamic_nodes", "read")]
-    uint2 dynamic_nodes;
-    /**
-     * @brief Descriptor-heap reference to svo_dynamic_leaves.
-     */
-    [WBE_DESCRIPTOR("storage_buffer", "svo_dynamic_leaves", "read")]
-    uint2 dynamic_leaves;
-    /**
      * @brief Descriptor-heap reference to svo_deferred_list_ping.
      */
     [WBE_DESCRIPTOR("storage_buffer", "svo_deferred_list_ping", "write")]
@@ -50,7 +39,7 @@ struct DynamicDescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "svo_deferred_list_pong", "write")]
     uint2 deferred_list_pong;
 };
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DynamicDescriptorIndices> descriptor_indices;
 
 /**
@@ -63,7 +52,6 @@ ConstantBuffer<DynamicDescriptorIndices> descriptor_indices;
 void main(uint3 p_id : SV_DispatchThreadID) {
     RWStructuredBuffer<SVOInfo> info = ResourceDescriptorHeap[descriptor_indices.info.x];
     RWStructuredBuffer<SVONode> nodes = ResourceDescriptorHeap[descriptor_indices.nodes.x];
-    StructuredBuffer<SVODynamicLeafBlock> leaves = ResourceDescriptorHeap[descriptor_indices.dynamic_leaves.x];
     uint index = p_id.x;
     if (index < info[0].node_count) {
         uint description = nodes[index].children_data;
@@ -71,7 +59,7 @@ void main(uint3 p_id : SV_DispatchThreadID) {
         if (state == uint(SVONode::ChildrenState::NODE_DYNAMIC)) {
             nodes[index].children_data = uint(SVONode::ChildrenState::EMPTY) << SVO_CHILDREN_STATE_SHIFT;
         } else if (state == uint(SVONode::ChildrenState::LEAF_DYNAMIC)) {
-            nodes[index].children_data = leaves[description & SVO_CHILDREN_BLOCK_INDEX_MASK].original_children_data;
+            nodes[index].children_data = nodes[index].original_children_data;
         }
     }
     if (index == 0) {

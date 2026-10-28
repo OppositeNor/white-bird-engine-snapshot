@@ -105,7 +105,7 @@ uint3 get_octree_debug_subgrid_grid_extent(uint p_max_depth) {
  * @param p_grid_extent Result of get_octree_debug_subgrid_grid_extent().
  */
 uint get_octree_debug_subgrid_index(uint3 p_subgrid, uint3 p_grid_extent) {
-    return flatten_index_3d(p_subgrid, p_grid_extent.x, p_grid_extent.y);
+    return p_subgrid.flatten(p_grid_extent.x, p_grid_extent.y);
 }
 
 /**
@@ -114,7 +114,7 @@ uint get_octree_debug_subgrid_index(uint3 p_subgrid, uint3 p_grid_extent) {
  * @param p_grid_extent Result of get_octree_debug_subgrid_grid_extent().
  */
 uint3 get_octree_debug_subgrid(uint p_index, uint3 p_grid_extent) {
-    return unflatten_index_3d(p_index, p_grid_extent.x, p_grid_extent.y);
+    return uint3::unflatten(p_index, p_grid_extent.x, p_grid_extent.y);
 }
 
 /**
@@ -122,7 +122,7 @@ uint3 get_octree_debug_subgrid(uint p_index, uint3 p_grid_extent) {
  * @param p_local_index Local index below OCTREE_DEBUG_SUBGRID_LEAF_COUNT.
  */
 uint3 get_octree_debug_subgrid_leaf(uint p_local_index) {
-    return unflatten_index_3d(p_local_index, OCTREE_DEBUG_SUBGRID_EXTENT.x, OCTREE_DEBUG_SUBGRID_EXTENT.y);
+    return uint3::unflatten(p_local_index, OCTREE_DEBUG_SUBGRID_EXTENT.x, OCTREE_DEBUG_SUBGRID_EXTENT.y);
 }
 
 /**
@@ -130,7 +130,7 @@ uint3 get_octree_debug_subgrid_leaf(uint p_local_index) {
  * @param p_local_leaf Leaf coordinate inside its subgrid.
  */
 uint get_octree_debug_subgrid_local_index(uint3 p_local_leaf) {
-    return flatten_index_3d(p_local_leaf, OCTREE_DEBUG_SUBGRID_EXTENT.x, OCTREE_DEBUG_SUBGRID_EXTENT.y);
+    return p_local_leaf.flatten(OCTREE_DEBUG_SUBGRID_EXTENT.x, OCTREE_DEBUG_SUBGRID_EXTENT.y);
 }
 
 /**

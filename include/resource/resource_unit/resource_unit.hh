@@ -19,7 +19,6 @@
 #include "core/memory/reference_raw.hh"
 #include "core/reflection/reflection_defs.hh"
 #include "core/reflection/serializable.hh"
-#include "glm/ext/matrix_float4x4.hpp"
 #include "resource/ktx_texture.hh"
 #include "utils/utils.hh"
 #include <bitset>
@@ -28,7 +27,6 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <vector>
 namespace WhiteBirdEngine {
 
 /**

@@ -62,33 +62,6 @@ def test_build_fullscreen_triangle_covers_clip_square(composition: spy.Module) -
         assert all(sign <= 0.0 for sign in signs) or all(sign >= 0.0 for sign in signs), point
 
 
-def random_view_projection(p_rng: np.random.Generator) -> np.ndarray:
-    """A perspective projection times a random rigid view transform."""
-    near, far, focal = 0.1, 100.0, 1.5
-    projection = np.array([[focal, 0.0, 0.0, 0.0], [0.0, focal, 0.0, 0.0],
-        [0.0, 0.0, far / (far - near), -far * near / (far - near)], [0.0, 0.0, 1.0, 0.0]])
-    rotation, _ = np.linalg.qr(p_rng.normal(size=(3, 3)))
-    view = np.eye(4)
-    view[:3, :3] = rotation
-    view[:3, 3] = p_rng.normal(size=3)
-    return projection @ view
-
-
-def test_world_position_from_depth(composition: spy.Module, rng: np.random.Generator) -> None:
-    view_projection = random_view_projection(rng)
-    inverse_view_projection = np.linalg.inv(view_projection)
-    # Pick points in view space inside the frustum, then map them back to world space.
-    ndc = np.stack([rng.uniform(-1.0, 1.0, SAMPLE_COUNT), rng.uniform(-1.0, 1.0, SAMPLE_COUNT),
-        rng.uniform(0.05, 0.99, SAMPLE_COUNT), np.ones(SAMPLE_COUNT)], axis=1)
-    world = ndc @ inverse_view_projection.T
-    world = world[:, :3] / world[:, 3:]
-    uvs = (ndc[:, :2] * 0.5 + 0.5).astype(np.float32)
-    depths = ndc[:, 2].astype(np.float32)
-    rows = [np.tile(inverse_view_projection[row].astype(np.float32), (SAMPLE_COUNT, 1)) for row in range(4)]
-    result = call(composition.world_position_from_depth, uvs, depths, *rows)
-    np.testing.assert_allclose(result, world, rtol=1e-3, atol=1e-3)
-
-
 def test_random_rsm_disk_offset_is_stratified(composition: spy.Module, rng: np.random.Generator) -> None:
     # One call covers every (receiver, light, sample) combination.
     receiver_uvs = rng.uniform(0.0, 1.0, (SAMPLE_COUNT, 2)).astype(np.float32)

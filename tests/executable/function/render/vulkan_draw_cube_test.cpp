@@ -211,7 +211,7 @@ void ApplicationVulkanDrawCubeTest::setup_draw_task() {
         .params =
             WBE::RTParamsGraphicsDrawMeshVK{
                 .mesh = std::string(WBE::STATIC_MESH_KEY),
-                .pipeline = "draw_cube_shadow_pipeline",
+                .pipeline = WBE::RTParamsGraphicsDrawMeshVK::make_default_pipeline("draw_cube_shadow_pipeline"),
                 .parts = {WBE::MeshPartVK::OPAQUE},
                 .render_extent = WBE::make_fixed_extent_params(shadow_extent),
                 .clear_values = {WBE::make_clear_color(0.0F, 0.0F, 0.0F, 0.0F), WBE::make_clear_depth(0.0F)},
@@ -228,7 +228,7 @@ void ApplicationVulkanDrawCubeTest::setup_draw_task() {
         .params =
             WBE::RTParamsGraphicsDrawMeshVK{
                 .mesh = std::string(WBE::STATIC_MESH_KEY),
-                .pipeline = "draw_cube_main_pipeline",
+                .pipeline = WBE::RTParamsGraphicsDrawMeshVK::make_default_pipeline("draw_cube_main_pipeline"),
                 .parts = {WBE::MeshPartVK::OPAQUE},
                 .clear_values = {WBE::make_clear_color(0.0F, 0.0F, 0.0F, 0.0F)},
             },

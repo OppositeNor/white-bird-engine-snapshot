@@ -16,7 +16,7 @@
  * @file copy_pixel_sort_source.slang
  * @brief Compute pass that copies an image into the pixel sort source, so that the sorted pixels can be written back to
  * the copied image in place.
- * @details Dispatch one 8x8 workgroup per 8x8 pixel tile of the input image.
+ * @details Dispatch one 16x16 workgroup per 16x16 pixel tile of the input image.
  */
 #include "utils.slang"
 
@@ -28,11 +28,11 @@ struct CopyPixelSortSourceDescriptorIndices {
     [WBE_DESCRIPTOR("storage_image", "pixel_sort_source", "write")] uint2 source;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<CopyPixelSortSourceDescriptorIndices> descriptor_indices;
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 p_dispatch_thread_id : SV_DispatchThreadID) {
     Texture2D<float4> input = ResourceDescriptorHeap[descriptor_indices.input.x];
     RWTexture2D<float4> source = ResourceDescriptorHeap[descriptor_indices.source.x];

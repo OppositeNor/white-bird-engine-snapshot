@@ -19,6 +19,7 @@ struct DescriptorIndices {
     [WBE_DESCRIPTOR("storage_buffer", "input_buffer", "read")] uint2 input_buffer;
     [WBE_DESCRIPTOR("storage_buffer", "histogram_buffer", "read")] uint2 histogram_buffer;
     [WBE_DESCRIPTOR("storage_buffer", "output_buffer", "write")] uint2 output_buffer;
+    [WBE_PUSH_CONSTANT("frame_slot")] uint shader_debug_frame_slot;
 };
 
 [vk::push_constant]
@@ -41,26 +42,28 @@ groupshared uint batch_digit_starts[WBE_RADIX_SORT_BUCKET_COUNT];
 // The histogram buffer must hold the column-wise inclusive prefix sum from radix_sort_histogram_add_overflow. Each element
 // is written to: (number of elements with a smaller digit) + (number of elements with the same digit in earlier
 // sub-histograms) + (rank among the elements with the same digit in this sub-histogram). The workgroup sorts its range
-// stably by the digit in batches of 256, so the scatter is stable. The output buffer receives the metadata of the input
-// buffer. Must be dispatched with the local sort dispatch.
+// stably by the digit in batches of 256, so the scatter is stable. The output buffer receives the element count and the
+// local sort count of the input buffer. Must be dispatched with the local sort dispatch.
 [shader("compute")]
 [numthreads(WORKGROUP_SIZE, 1, 1)]
 void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThreadID) {
-    RWStructuredBuffer<uint> input_buffer = ResourceDescriptorHeap[descriptor_indices.input_buffer.x];
+    uint frame_slot = descriptor_indices.shader_debug_frame_slot;
     RWStructuredBuffer<uint> histogram_buffer = ResourceDescriptorHeap[descriptor_indices.histogram_buffer.x];
-    RWStructuredBuffer<uint> output_buffer = ResourceDescriptorHeap[descriptor_indices.output_buffer.x];
+    CountedBuffer<uint> input_keys = CountedBuffer<uint>(descriptor_indices.input_buffer, frame_slot);
+    CountedBuffer<uint> output_keys = CountedBuffer<uint>(descriptor_indices.output_buffer, frame_slot);
     uint group_id = p_group_id.x;
     uint group_thread_id = p_group_thread_id.x;
     uint thread_data_start = group_thread_id * 4;
-    uint element_count = input_buffer[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX];
+    uint element_count = input_keys.size();
     uint sub_histogram_num = histogram_buffer[WBE_RADIX_SORT_SUB_HISTOGRAM_NUM_INDEX];
     uint lane_start = histogram_buffer[WBE_RADIX_SORT_LANE_START_INDEX];
     if (group_id >= sub_histogram_num) {
         return;
     }
     if (group_id == 0 && group_thread_id == 0) {
-        output_buffer[WBE_RADIX_SORT_ELEMENT_COUNT_INDEX] = element_count;
-        output_buffer[WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX] = input_buffer[WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX];
+        output_keys.set_size(element_count);
+        output_keys.set_header(
+            WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX, input_keys.get_header(WBE_RADIX_SORT_LOCAL_SORT_NUM_INDEX));
     }
 
     // The last sub-histogram holds the total count of each digit after the column-wise inclusive prefix sum. An exclusive
@@ -70,7 +73,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
         sort_scratch[thread_data_start + i] = histogram_buffer[last_sub_histogram_start + thread_data_start + i];
     }
     GroupMemoryBarrierWithGroupSync();
-    workgroup_inclusive_prefix_sum_64_256(sort_scratch, thread_data_start);
+    workgroup_inclusive_prefix_sum_64_256<uint, Add<uint>>(sort_scratch, thread_data_start);
     [unroll] for (uint i = 0; i < 4; ++i) {
         uint digit = thread_data_start + i;
         // The index of the first digit underflows past the end, so it reads zero.
@@ -94,7 +97,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
         [unroll] for (uint i = 0; i < 4; ++i) {
             uint index = thread_data_start + i;
             sort_keys[index] =
-                index < batch_count ? input_buffer[WBE_RADIX_SORT_DATA_START + batch_begin + index] : 0xFFFFFFFFu;
+                index < batch_count ? input_keys.get(batch_begin + index) : 0xFFFFFFFFu;
         }
         // Also orders the sort_scratch reads above before the sort overwrites it.
         GroupMemoryBarrierWithGroupSync();
@@ -123,7 +126,7 @@ void main(uint3 p_group_id : SV_GroupID, uint3 p_group_thread_id : SV_GroupThrea
             uint index = thread_data_start + i;
             if (index < batch_count) {
                 uint rank = index - batch_digit_starts[digits[i]];
-                output_buffer[WBE_RADIX_SORT_DATA_START + digit_offsets[digits[i]] + rank] = keys[i];
+                output_keys.set(digit_offsets[digits[i]] + rank, keys[i]);
                 if (index == batch_count - 1
                     || radix_sort_digit(sort_keys[index + 1], WBE_RADIX_HISTOGRAM_BIT_REGION) != digits[i]) {
                     batch_digit_counts[i] = rank + 1;

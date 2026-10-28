@@ -15,8 +15,6 @@
 #ifndef WBE_FILE_APPLICATION_HH
 #define WBE_FILE_APPLICATION_HH
 
-#include "utils/defs.hh"
-
 namespace WhiteBirdEngine {
 
 /**

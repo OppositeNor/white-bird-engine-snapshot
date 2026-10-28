@@ -17,6 +17,7 @@
 #include "function/render_vk/mesh_gpu_data_vk.hh"
 #include "function/render_vk/mesh_resources_vk.hh"
 #include "function/render_vk/render_graph_context_vk.hh"
+#include "core/data/data_value.hh"
 #include "function/render_vk/render_task_registry_vk.hh"
 #include "function/render_vk/render_context_vk.hh"
 #include "function/render_vk/rt_graphics_draw_mesh_vk.hh"
@@ -61,26 +62,54 @@ TEST(WBERTGraphicsDrawMeshVKTest, IsRegisteredUnderItsNameAndAlias) {
 
 TEST(WBERTGraphicsDrawMeshVKTest, ParametersNamePartsByAlias) {
     const RTParamsGraphicsDrawMeshVK params = parse_draw_mesh_params(
-        R"({"mesh": "sponza", "pipeline": "gbuffer", "parts": ["opaque", "DOUBLE_SIDED", "masked"], "transform": "sponza_transform", "depth_load_op": "load"})");
+        R"({"mesh": "sponza", "pipeline": {"default": "gbuffer"}, "parts": ["opaque", "DOUBLE_SIDED", "masked"], "transform": "sponza_transform", "depth_load_op": "load"})");
     EXPECT_EQ(params.mesh, "sponza");
     EXPECT_EQ(params.parts, (std::vector<MeshPartVK>{MeshPartVK::OPAQUE, MeshPartVK::DOUBLE_SIDED, MeshPartVK::MASKED}));
     EXPECT_EQ(params.transform, std::optional<std::string>("sponza_transform"));
     EXPECT_EQ(params.depth_load_op, AttachmentLoadOpVK::LOAD);
     EXPECT_EQ(params.color_load_op, AttachmentLoadOpVK::CLEAR);
-    EXPECT_THROW((void)parse_draw_mesh_params(R"({"mesh": "m", "pipeline": "p", "parts": ["translucent"]})"), std::runtime_error);
-    EXPECT_THROW((void)parse_draw_mesh_params(R"({"mesh": "m", "pipeline": "p"})"), std::runtime_error);
-    EXPECT_THROW((void)parse_draw_mesh_params(R"({"mesh": "m", "pipeline": "p", "parts": ["opaque"], "part": "masked"})"), std::runtime_error);
+    EXPECT_THROW((void)parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"default": "p"}, "parts": ["translucent"]})"), std::runtime_error);
+    EXPECT_THROW((void)parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"default": "p"}})"), std::runtime_error);
+    EXPECT_THROW((void)parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"default": "p"}, "parts": ["opaque"], "part": "masked"})"), std::runtime_error);
 }
 
 TEST(WBERTGraphicsDrawMeshVKTest, CreateValidatesPartsBeforeLookingUpResources) {
     RenderAllocator allocator(WBE_KI_B(64));
     RenderContextVK render_data(&allocator);
-    RTParamsGraphicsDrawMeshVK params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": "p", "parts": []})");
+    RTParamsGraphicsDrawMeshVK params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"default": "p"}, "parts": []})");
     EXPECT_NE(create_error(params, &render_data).find("at least one mesh part"), std::string::npos);
     params.parts = {MeshPartVK::OPAQUE, MeshPartVK::MASKED, MeshPartVK::OPAQUE};
     EXPECT_NE(create_error(params, &render_data).find("'OPAQUE' is listed more than once"), std::string::npos);
     params.parts = {MeshPartVK::MASKED};
     EXPECT_NE(create_error(params, &render_data).find("render database is unavailable"), std::string::npos);
+}
+
+TEST(WBERTGraphicsDrawMeshVKTest, CreateValidatesPipelineVariantsBeforeLookingUpResources) {
+    RenderAllocator allocator(WBE_KI_B(64));
+    RenderContextVK render_data(&allocator);
+    RTParamsGraphicsDrawMeshVK params =
+        parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"default": "p", "tinted": "p_tinted"}, "parts": ["opaque"]})");
+    ASSERT_TRUE(params.pipeline.get_kind() == DataValueKind::MAP);
+    ASSERT_EQ(params.pipeline.as_map().size(), 2U);
+    EXPECT_EQ(params.pipeline.get_value<std::string>("default"), "p");
+    EXPECT_EQ(params.pipeline.get_value<std::string>("tinted"), "p_tinted");
+    EXPECT_NE(create_error(params, &render_data).find("render database is unavailable"), std::string::npos);
+    // A task may draw only materials of other variants.
+    params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"tinted": "p_tinted"}, "parts": ["opaque"]})");
+    EXPECT_NE(create_error(params, &render_data).find("render database is unavailable"), std::string::npos);
+
+    params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": "p", "parts": ["opaque"]})");
+    EXPECT_NE(create_error(params, &render_data).find("must map pipeline variants to pipeline keys"), std::string::npos);
+    params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {}, "parts": ["opaque"]})");
+    EXPECT_NE(create_error(params, &render_data).find("must map at least one pipeline variant"), std::string::npos);
+    params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"tinted": 3}, "parts": ["opaque"]})");
+    EXPECT_NE(create_error(params, &render_data).find("must map to a pipeline key string"), std::string::npos);
+    params = parse_draw_mesh_params(R"({"mesh": "m", "pipeline": {"tinted": ""}, "parts": ["opaque"]})");
+    EXPECT_NE(create_error(params, &render_data).find("maps to an empty pipeline key"), std::string::npos);
+
+    const DataValue single = RTParamsGraphicsDrawMeshVK::make_default_pipeline("p");
+    ASSERT_EQ(single.as_map().size(), 1U);
+    EXPECT_EQ(single.get_value<std::string>(MATERIAL_PIPELINE_VARIANT_DEFAULT), "p");
 }
 
 TEST(WBEMeshResourcesVKTest, NamesPartsAndMaterialTables) {

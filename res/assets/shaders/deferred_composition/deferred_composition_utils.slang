@@ -73,13 +73,6 @@ float3 fresnel_schlick(float p_cos_theta, float3 p_f0) {
     return p_f0 + (1.0 - p_f0) * pow(1.0 - clamp(p_cos_theta, 0.0, 1.0), 5.0);
 }
 
-float3 world_position_from_depth(float2 p_uv, float p_depth, float4x4 p_inv_view_proj) {
-    float2 ndc_xy = p_uv * 2.0 - 1.0;
-    float4 ndc = float4(ndc_xy, p_depth, 1.0);
-    float4 world = mul(p_inv_view_proj, ndc);
-    return world.xyz / world.w;
-}
-
 float2 random_rsm_disk_offset(float2 p_receiver_uv, uint p_spot_light_index, uint p_sample_index) {
     float sample_index = float(p_sample_index);
     float light_index = float(p_spot_light_index + 1);

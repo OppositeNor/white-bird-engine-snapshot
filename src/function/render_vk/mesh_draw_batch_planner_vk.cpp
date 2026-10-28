@@ -22,6 +22,7 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -58,6 +59,7 @@ struct MeshDrawGroupVK {
     MeshDrawGroupVK(MeshDrawGroupVK&&) noexcept = default;
     MeshDrawGroupVK& operator=(MeshDrawGroupVK&&) noexcept = default;
     std::span<const RUVertexView> vertex_bindings;
+    std::string_view pipeline_variant;
     Vector<MeshDrawBindingPlacementVK, RenderAllocator> bindings;
     VkDeviceSize minimum_first_vertex = 0;
     VkDeviceSize maximum_first_vertex = 0;
@@ -106,9 +108,11 @@ MeshDrawPlacementVK make_mesh_draw_placement(RenderAllocator* p_allocator, const
     return result;
 }
 
-bool mesh_group_accepts(
-    const MeshDrawGroupVK& p_group, std::span<const RUVertexView> p_vertex_bindings, const MeshDrawPlacementVK& p_placement) {
-    if (!mesh_vertex_layouts_equal(p_group.vertex_bindings, p_vertex_bindings)) {
+bool mesh_group_accepts(const MeshDrawGroupVK& p_group, const MeshDrawBatchPlannerVK::Draw& p_draw, const MeshDrawPlacementVK& p_placement) {
+    if (p_group.pipeline_variant != p_draw.pipeline_variant) {
+        return false;
+    }
+    if (!mesh_vertex_layouts_equal(p_group.vertex_bindings, p_draw.vertex_bindings)) {
         return false;
     }
     for (size_t i = 0; i < p_group.bindings.size(); ++i) {
@@ -173,12 +177,13 @@ MeshDrawBatchPlannerVK::BuildResult MeshDrawBatchPlannerVK::build(
         ++drawable_count;
         MeshDrawPlacementVK placement = make_mesh_draw_placement(p_allocator, draw);
         auto group = std::find_if(groups.begin(), groups.end(), [&](const MeshDrawGroupVK& p_group) {
-            return mesh_group_accepts(p_group, draw.vertex_bindings, placement);
+            return mesh_group_accepts(p_group, draw, placement);
         });
         if (group == groups.end()) {
             groups.emplace_back(p_allocator);
             group = groups.end() - 1;
             group->vertex_bindings = draw.vertex_bindings;
+            group->pipeline_variant = draw.pipeline_variant;
             group->bindings = std::move(placement.bindings);
             group->minimum_first_vertex = placement.first_vertex;
             group->maximum_first_vertex = placement.first_vertex;
@@ -197,6 +202,7 @@ MeshDrawBatchPlannerVK::BuildResult MeshDrawBatchPlannerVK::build(
                 Batch batch;
                 batch.first_draw = static_cast<uint32_t>(result.commands.size());
                 batch.vertex_bindings = group.vertex_bindings;
+                batch.pipeline_variant = group.pipeline_variant;
                 batch.vertex_binaries.reserve(group.bindings.size());
                 batch.vertex_buffer_offsets.reserve(group.bindings.size());
                 for (const MeshDrawBindingPlacementVK& binding : group.bindings) {
@@ -244,6 +250,9 @@ MeshDrawBatchPlannerVK::BuildResult MeshDrawBatchPlannerVK::build(RenderAllocato
         draw.indices = submesh.indices;
         draw.instance_count = static_cast<uint32_t>(submesh.instance_count);
         draw.first_instance = p_first_instances[i];
+        if (submesh.material != nullptr) {
+            draw.pipeline_variant = submesh.material->get_pipeline_variant();
+        }
         draws.push_back(std::move(draw));
     }
     return build(p_allocator, std::span<const Draw>(draws.data(), draws.size()), p_max_draw_count);

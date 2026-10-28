@@ -926,6 +926,7 @@ void RendererVK::create_logical_device() { // NOLINT
     device_features.shaderUniformBufferArrayDynamicIndexing = VK_TRUE;
     device_features.textureCompressionBC = supported_device_features.textureCompressionBC;
     device_features.geometryShader = supported_device_features.geometryShader;
+    device_features.shaderInt64 = VK_TRUE;
     create_info.pEnabledFeatures = &device_features;
 
     VkPhysicalDeviceTimelineSemaphoreFeatures semaphore_features{};
@@ -974,6 +975,18 @@ void RendererVK::create_logical_device() { // NOLINT
     memory_model_features.vulkanMemoryModel = VK_TRUE;
     memory_model_features.vulkanMemoryModelDeviceScope = VK_TRUE;
     vertex_input_dynamic_state_features.pNext = &memory_model_features;
+
+    // Shaders may use 64-bit atomics on buffers, workgroup memory, and storage images.
+    VkPhysicalDeviceShaderAtomicInt64Features atomic_int64_features{};
+    atomic_int64_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES;
+    atomic_int64_features.shaderBufferInt64Atomics = VK_TRUE;
+    atomic_int64_features.shaderSharedInt64Atomics = VK_TRUE;
+    memory_model_features.pNext = &atomic_int64_features;
+
+    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT image_atomic_int64_features{};
+    image_atomic_int64_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
+    image_atomic_int64_features.shaderImageInt64Atomics = VK_TRUE;
+    atomic_int64_features.pNext = &image_atomic_int64_features;
     for (auto& plugin : registered_plugins) {
         plugin->on_before_device_creation(physical_device, &create_info, &device_features);
     }
@@ -1129,6 +1142,9 @@ std::vector<std::string> RendererVK::collect_device_unsuitability_reasons(VkPhys
     if (supported_device_features.shaderUniformBufferArrayDynamicIndexing != VK_TRUE) {
         missing_features.emplace_back("VkPhysicalDeviceFeatures.shaderUniformBufferArrayDynamicIndexing");
     }
+    if (supported_device_features.shaderInt64 != VK_TRUE) {
+        missing_features.emplace_back("VkPhysicalDeviceFeatures.shaderInt64");
+    }
     if (!check_device_feature_support<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES>(
             p_device, &VkPhysicalDeviceBufferDeviceAddressFeatures::bufferDeviceAddress)) {
         missing_features.emplace_back("VkPhysicalDeviceBufferDeviceAddressFeatures.bufferDeviceAddress");
@@ -1148,6 +1164,18 @@ std::vector<std::string> RendererVK::collect_device_unsuitability_reasons(VkPhys
     if (!check_device_feature_support<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT>(
             p_device, &VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT::vertexInputDynamicState)) {
         missing_features.emplace_back("VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT.vertexInputDynamicState");
+    }
+    if (!check_device_feature_support<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES>(
+            p_device, &VkPhysicalDeviceShaderAtomicInt64Features::shaderBufferInt64Atomics)) {
+        missing_features.emplace_back("VkPhysicalDeviceShaderAtomicInt64Features.shaderBufferInt64Atomics");
+    }
+    if (!check_device_feature_support<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES>(
+            p_device, &VkPhysicalDeviceShaderAtomicInt64Features::shaderSharedInt64Atomics)) {
+        missing_features.emplace_back("VkPhysicalDeviceShaderAtomicInt64Features.shaderSharedInt64Atomics");
+    }
+    if (!check_device_feature_support<VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT>(
+            p_device, &VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT::shaderImageInt64Atomics)) {
+        missing_features.emplace_back("VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT.shaderImageInt64Atomics");
     }
     if (!missing_features.empty()) {
         reasons.emplace_back(std::format("Missing required device features: {}.", join_string_list(missing_features)));

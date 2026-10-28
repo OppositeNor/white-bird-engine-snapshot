@@ -23,3 +23,13 @@ dependencies:
   # Requirements of slangpy, which build.py builds from dependencies/slangpy for the shader tests.
   - typing_extensions
   - libcst
+  # Requirements of mesh-to-sdf, which the ACP samples mesh signed distance fields with.
+  - pyopengl
+  - pyrender
+  - scikit-image
+  - scikit-learn
+  - trimesh
+  - pip
+  - pip:
+    # pip-only; its dependencies above come from conda-forge.
+    - mesh-to-sdf==0.0.15

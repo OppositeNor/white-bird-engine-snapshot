@@ -44,6 +44,8 @@ enum class ShaderDebugError {
     OCTREE_LEAF_LIST_OVERFLOW = 7,
     OCTREE_DEBUG_NODE_LIST_OVERFLOW = 8,
     SVO_VOXEL_DATA_INDEX_OVERFLOW = 9,
+    COUNTED_BUFFER_OVERFLOW = 10,
+    COUNTED_BUFFER_UNALIGNED_SIZE = 11,
 };
 
 /** Shader-visible buffer descriptor reserved by the renderer. */
@@ -108,13 +110,6 @@ struct WBE_PUSH_CONSTANTAttribute {
     string value;
 };
 
-/** Marks a struct as an engine-discoverable data type in reflection metadata. */
-[__AttributeUsage(_AttributeTargets.Struct)]
-struct WBE_DATA_TYPEAttribute {
-    /** Optional logical type name; an empty value means to use the struct name. */
-    string type_name = "";
-};
-
 /**
  * @brief The input data from the vertex buffer
  */
@@ -164,6 +159,48 @@ struct CameraInfo {
     float4 world_position;
 };
 
+/**
+ * @brief Multiply a vector by matrix rows loaded individually from descriptor-heap memory.
+ * This is a temporary work around for a bug of the NVIDIA driver when loading matrix rows.
+ * @param p_row_0 First matrix row.
+ * @param p_row_1 Second matrix row.
+ * @param p_row_2 Third matrix row.
+ * @param p_row_3 Fourth matrix row.
+ * @param p_vector Vector to transform.
+ * @return The matrix-vector product.
+ */
+float4 software_mul_float4x4_vector(
+    float4 p_row_0, float4 p_row_1, float4 p_row_2, float4 p_row_3, float4 p_vector) {
+    return float4(dot(p_row_0, p_vector), dot(p_row_1, p_vector), dot(p_row_2, p_vector), dot(p_row_3, p_vector));
+}
+
+// Temporary workaround for whole matrix loads ignoring MatrixStride through SPV_EXT_descriptor_heap.
+#define WBE_SOFTWARE_MATRIX_ROWS(p_matrix)                                                                                 \
+    float4((p_matrix)[0][0], (p_matrix)[1][0], (p_matrix)[2][0], (p_matrix)[3][0]),                                      \
+        float4((p_matrix)[0][1], (p_matrix)[1][1], (p_matrix)[2][1], (p_matrix)[3][1]),                                  \
+        float4((p_matrix)[0][2], (p_matrix)[1][2], (p_matrix)[2][2], (p_matrix)[3][2]),                                  \
+        float4((p_matrix)[0][3], (p_matrix)[1][3], (p_matrix)[2][3], (p_matrix)[3][3])
+
+/**
+ * @brief Reconstruct a world-space position from a screen UV and its depth.
+ * @details The UV maps to normalized device coordinates x and y in [-1, 1]; the depth is used as the NDC z unchanged. The
+ * matrix rows are loaded individually as in software_mul_float4x4_vector().
+ * @param p_uv Screen UV in [0, 1].
+ * @param p_depth Depth sampled at the UV, in NDC.
+ * @param p_row_0 First row of the inverse view-projection matrix.
+ * @param p_row_1 Second row of the inverse view-projection matrix.
+ * @param p_row_2 Third row of the inverse view-projection matrix.
+ * @param p_row_3 Fourth row of the inverse view-projection matrix.
+ * @return The world-space position after the perspective divide.
+ */
+float3 world_position_from_depth(
+    float2 p_uv, float p_depth, float4 p_row_0, float4 p_row_1, float4 p_row_2, float4 p_row_3) {
+    float2 ndc_xy = p_uv * 2.0 - 1.0;
+    float4 ndc = float4(ndc_xy, p_depth, 1.0);
+    float4 world = software_mul_float4x4_vector(p_row_0, p_row_1, p_row_2, p_row_3, ndc);
+    return world.xyz / world.w;
+}
+
 /** Maximum number of bindless material entries addressable by one draw pass. */
 static const uint WBE_MAX_MATERIAL_COUNT = 32;
 
@@ -176,7 +213,6 @@ struct WBE_TEXTUREAttribute {
 
 #ifdef WBE_REFLECTION_METADATA
 /** Reflection-only view of the material texture contract. */
-[WBE_DATA_TYPE]
 struct MaterialTextureContractMetadata {
     SamplerState material_sampler;
     Texture2D<float4> textures[];
@@ -184,7 +220,6 @@ struct MaterialTextureContractMetadata {
 #endif
 
 /** Fixed descriptor indices for one material's textures. */
-[WBE_DATA_TYPE]
 struct MaterialParams {
     /** Albedo texture descriptor index. */
     [WBE_TEXTURE("albedo")]
@@ -198,14 +233,12 @@ struct MaterialParams {
 };
 
 /** Fixed descriptor-index table for every material addressed by an indirect draw. */
-[WBE_DATA_TYPE]
 struct MaterialParamsBuffer {
     /** Material entries indexed by the indirect draw's material index. */
     MaterialParams materials[WBE_MAX_MATERIAL_COUNT];
 };
 
 /** Per-submesh metadata for one mesh draw entry. */
-[WBE_DATA_TYPE]
 struct SubmeshData {
     /** Material table entry used by this submesh. */
     uint material_id;
@@ -215,7 +248,6 @@ struct SubmeshData {
 };
 
 /** Transform payload of one mesh node, or of the whole mesh. */
-[WBE_DATA_TYPE]
 struct NodeData {
     /** Engine-space column-major transform. */
     float4x4 transform;
@@ -224,7 +256,6 @@ struct NodeData {
 };
 
 /** Per-drawn-instance metadata linking one submesh to one node transform. */
-[WBE_DATA_TYPE]
 struct InstanceData {
     /** Index into the mesh.submeshes storage buffer. */
     uint submesh_index;
@@ -236,7 +267,6 @@ struct InstanceData {
 
 #ifdef WBE_REFLECTION_METADATA
 /** Reflection-only view of the mesh storage-buffer contract. */
-[WBE_DATA_TYPE]
 struct MeshContractMetadata {
     StructuredBuffer<SubmeshData> submeshes;
     StructuredBuffer<NodeData> nodes;
@@ -420,6 +450,23 @@ uint2 z_order_swizzle_8x8(uint2 p_group_id, uint2 p_group_thread_id) {
 }
 
 /**
+ * @brief Map a thread of a 16x16 workgroup to its pixel, visiting the workgroup's 16x16 tile in Z order.
+ * @details The thread's row-major index within the workgroup is read as a Morton code: its even bits are the x offset
+ * within the tile and its odd bits the y offset.
+ * @param p_group_id Workgroup id; each workgroup covers one 16x16 tile.
+ * @param p_group_thread_id Thread id within the workgroup, each component in [0, 16).
+ * @return The pixel the thread processes.
+ */
+uint2 z_order_swizzle_16x16(uint2 p_group_id, uint2 p_group_thread_id) {
+    uint linear_index = p_group_thread_id.y * 16 + p_group_thread_id.x;
+    uint swizzled_x = ((linear_index >> 0) & 0x1) | ((linear_index >> 1) & 0x2) | ((linear_index >> 2) & 0x4)
+        | ((linear_index >> 3) & 0x8);
+    uint swizzled_y = ((linear_index >> 1) & 0x1) | ((linear_index >> 2) & 0x2) | ((linear_index >> 3) & 0x4)
+        | ((linear_index >> 4) & 0x8);
+    return p_group_id * 16 + uint2(swizzled_x, swizzled_y);
+}
+
+/**
  * @brief Spreads the low 10 bits of a value so that two zero bits separate each pair of consecutive bits.
  * @param p_value The value to spread. Bits above bit 9 are discarded.
  * @return The spread value, with input bit i at output bit 3 * i.
@@ -445,29 +492,57 @@ uint morton_encode_3d(uint3 p_coordinate) {
 }
 
 /**
- * @brief Flattens a 3D coordinate into a linear index, with x varying fastest and z slowest.
- * @param p_coordinate The coordinate to flatten; x must be less than p_width and y less than p_height.
- * @param p_width The grid's extent along x.
- * @param p_height The grid's extent along y.
- * @return p_coordinate.x + p_width * (p_coordinate.y + p_height * p_coordinate.z).
+ * @brief Linear indexing of 2D grid coordinates, with x varying fastest and y slowest.
  */
-uint flatten_index_3d(uint3 p_coordinate, uint p_width, uint p_height) {
-    return p_coordinate.x + p_width * (p_coordinate.y + p_height * p_coordinate.z);
+extension uint2 {
+    /**
+     * @brief Flattens the coordinate into a linear index.
+     * @param p_width The grid's extent along x; x must be less than it.
+     * @return x + p_width * y.
+     */
+    uint flatten(uint p_width) {
+        return this.x + p_width * this.y;
+    }
+
+    /**
+     * @brief Recovers the coordinate of a linear index, inverting flatten().
+     * @param p_index The linear index.
+     * @param p_width The grid's extent along x; must be nonzero.
+     * @return The coordinate whose flattened index is p_index.
+     */
+    static uint2 unflatten(uint p_index, uint p_width) {
+        return uint2(p_index % p_width, p_index / p_width);
+    }
 }
 
 /**
- * @brief Recovers the 3D coordinate of a linear index, inverting flatten_index_3d().
- * @param p_index The linear index.
- * @param p_width The grid's extent along x; must be nonzero.
- * @param p_height The grid's extent along y; must be nonzero.
- * @return The coordinate whose flattened index is p_index.
+ * @brief Linear indexing of 3D grid coordinates, with x varying fastest and z slowest.
  */
-uint3 unflatten_index_3d(uint p_index, uint p_width, uint p_height) {
-    return uint3(p_index % p_width, (p_index / p_width) % p_height, p_index / (p_width * p_height));
+extension uint3 {
+    /**
+     * @brief Flattens the coordinate into a linear index.
+     * @param p_width The grid's extent along x; x must be less than it.
+     * @param p_height The grid's extent along y; y must be less than it.
+     * @return x + p_width * (y + p_height * z).
+     */
+    uint flatten(uint p_width, uint p_height) {
+        return this.x + p_width * (this.y + p_height * this.z);
+    }
+
+    /**
+     * @brief Recovers the coordinate of a linear index, inverting flatten().
+     * @param p_index The linear index.
+     * @param p_width The grid's extent along x; must be nonzero.
+     * @param p_height The grid's extent along y; must be nonzero.
+     * @return The coordinate whose flattened index is p_index.
+     */
+    static uint3 unflatten(uint p_index, uint p_width, uint p_height) {
+        return uint3(p_index % p_width, (p_index / p_width) % p_height, p_index / (p_width * p_height));
+    }
 }
 
 /**
- * @brief Recovers the 3D coordinate of a linear index like unflatten_index_3d(), checking it against the grid's depth.
+ * @brief Recovers the 3D coordinate of a linear index like uint3::unflatten(), checking it against the grid's depth.
  * @details In shader-debug builds, an index past the grid's cell count reports p_overflow_error; the result is not clamped
  * otherwise.
  * @param p_index The linear index.
@@ -476,8 +551,8 @@ uint3 unflatten_index_3d(uint p_index, uint p_width, uint p_height) {
  * @param p_frame_slot Renderer frame slot receiving the error.
  * @return The coordinate whose flattened index is p_index.
  */
-uint3 unflatten_index_3d_checked(uint p_index, uint3 p_extent, ShaderDebugError p_overflow_error, uint p_frame_slot) {
-    uint3 coordinate = unflatten_index_3d(p_index, p_extent.x, p_extent.y);
+uint3 unflatten_index_checked(uint p_index, uint3 p_extent, ShaderDebugError p_overflow_error, uint p_frame_slot) {
+    uint3 coordinate = uint3::unflatten(p_index, p_extent.x, p_extent.y);
     WBE_SHADER_DEBUG_ASSERT(coordinate.z < p_extent.z, p_overflow_error, p_frame_slot);
     return coordinate;
 }

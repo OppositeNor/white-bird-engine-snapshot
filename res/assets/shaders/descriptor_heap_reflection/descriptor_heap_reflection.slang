@@ -41,7 +41,7 @@ struct DescriptorHeapProbeIndices {
     float time;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DescriptorHeapProbeIndices> descriptor_indices;
 
 #ifdef WBE_REFLECTION_METADATA

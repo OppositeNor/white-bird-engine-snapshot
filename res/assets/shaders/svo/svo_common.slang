@@ -20,7 +20,6 @@
 /**
  * @brief Four scalar fields with a 16-byte storage-buffer array stride.
  */
-[WBE_DATA_TYPE]
 struct SVONode {
     enum class ChildrenState {
         NODE = 0,
@@ -37,7 +36,8 @@ struct SVONode {
      * ALLOCATING_DYNAMIC=4, NODE_DYNAMIC=5 and LEAF_DYNAMIC=6.
      * LEAF uses bits 28:21 for occupancy (bit 21 is sector zero) and bits 20:0 for an eight-leaf block index.
      * NODE uses bits 20:0 for an eight-node block index; bits 28:21 are unused.
-     * NODE_DYNAMIC stores a virtual block index offset by max_node_count; LEAF_DYNAMIC indexes a dynamic leaf block.
+     * NODE_DYNAMIC indexes a block of dynamic nodes, which follow the static nodes in the node buffer; LEAF_DYNAMIC indexes
+     * a block of dynamic leaves, which follow the static leaves in the leaf buffer.
      * EMPTY, ALLOCATING and ALLOCATING_DYNAMIC ignore the lower twenty-nine bits during traversal. In svo_2,
      * ALLOCATING and ALLOCATING_DYNAMIC carry the new block index and occupancy until the publication pass, where zero
      * occupancy identifies a node block and nonzero occupancy identifies a leaf block.
@@ -53,9 +53,55 @@ struct SVONode {
      */
     int parent_index;
     /**
-     * @brief Original child description saved by the dynamic allocation owner.
+     * @brief Original child description saved by the dynamic allocation owner; the dynamic clear restores LEAF_DYNAMIC
+     * nodes from it.
      */
     uint original_children_data;
+
+    /**
+     * @brief Decodes the ChildrenState of children_data.
+     */
+    ChildrenState get_children_state() {
+        return ChildrenState(children_data >> SVO_CHILDREN_STATE_SHIFT);
+    }
+
+    /**
+     * @brief Decodes the eight-child block index of children_data.
+     */
+    uint get_children_block_index() {
+        return children_data & SVO_CHILDREN_BLOCK_INDEX_MASK;
+    }
+
+    /**
+     * @brief Decodes the index of the first child of the block in children_data.
+     */
+    uint get_children_index() {
+        return get_children_block_index() * 8;
+    }
+
+    /**
+     * @brief Decodes the eight sector occupancy bits of children_data; bit 0 is sector zero.
+     * @details Meaningful for LEAF and LEAF_DYNAMIC, and for svo_2's ALLOCATING and ALLOCATING_DYNAMIC before publication.
+     */
+    uint get_children_occupancy() {
+        return (children_data & SVO_CHILDREN_OCCUPANCY_MASK) >> SVO_CHILDREN_OCCUPANCY_SHIFT;
+    }
+
+    /**
+     * @brief Counts the occupied sectors in children_data.
+     * @details Meaningful wherever get_children_occupancy() is.
+     */
+    uint count_children_occupancy() {
+        return countbits(get_children_occupancy());
+    }
+
+    /**
+     * @brief Tests the occupancy bit of one sector in children_data.
+     * @param p_sector Sector below eight, as returned by get_svo_node_subregion().
+     */
+    bool is_sector_occupied(uint p_sector) {
+        return (children_data & (1u << (SVO_CHILDREN_OCCUPANCY_SHIFT + p_sector))) != 0;
+    }
 };
 
 /**
@@ -82,7 +128,6 @@ static const uint SVO_CHILDREN_PAYLOAD_MASK = 0x1fffffffu;
 /**
  * @brief One initialized leaf slot; occupancy is published in its parent node.
  */
-[WBE_DATA_TYPE]
 struct SVOLeaf {
     /**
      * @brief Index of the data in the data buffer.
@@ -97,7 +142,6 @@ struct SVOLeaf {
 /**
  * @brief Immutable spatial configuration and mutable construction counters.
  */
-[WBE_DATA_TYPE]
 struct SVOInfo {
     /**
      * @brief The origin of the SVO in world space.
@@ -112,19 +156,12 @@ struct SVOInfo {
      */
     uint max_depth;
     /**
-     * @brief The capacity of the node buffer.
-     */
-    uint max_node_count;
-    /**
-     * @brief The capacity of the leaf buffer.
-     */
-    uint max_leaves_count;
-    /**
-     * @brief The number of stored nodes, including the first eight sectors but excluding the implicit root.
+     * @brief The number of static nodes, including the first eight sectors but excluding the implicit root; the dynamic
+     * nodes follow them in the node buffer.
      */
     uint node_count;
     /**
-     * @brief The number of leaves.
+     * @brief The number of static leaves; the dynamic leaves follow them in the leaf buffer.
      */
     uint leaves_count;
     /**
@@ -136,22 +173,39 @@ struct SVOInfo {
      */
     uint max_deferred_task_count;
     /**
-     * @brief Capacity of the separate dynamic node array.
-     */
-    uint max_dynamic_node_count;
-    /**
-     * @brief Capacity in leaf slots; the dynamic array stores blocks of eight leaves plus a saved parent word.
-     */
-    uint max_dynamic_leaves_count;
-    /**
-     * @brief Allocated dynamic node slots, reset after restoring static parent links.
+     * @brief Allocated dynamic node slots, starting at node_count in the node buffer; reset after restoring static parent
+     * links.
      */
     uint dynamic_node_count;
     /**
-     * @brief Allocated dynamic leaf slots, always a multiple of eight.
+     * @brief Allocated dynamic leaf slots, starting at leaves_count in the leaf buffer; always a multiple of eight.
      */
     uint dynamic_leaves_count;
 };
+
+/**
+ * @brief Get the capacity of the node buffer, shared by the static nodes and the dynamic nodes that follow them.
+ * @param p_nodes The node buffer.
+ * @return The number of nodes the buffer holds, from its dimensions.
+ */
+uint get_svo_node_capacity(RWStructuredBuffer<SVONode> p_nodes) {
+    uint node_count;
+    uint stride;
+    p_nodes.GetDimensions(node_count, stride);
+    return node_count;
+}
+
+/**
+ * @brief Get the capacity of the leaf buffer, shared by the static leaves and the dynamic leaves that follow them.
+ * @param p_leaves The leaf buffer.
+ * @return The number of leaves the buffer holds, from its dimensions.
+ */
+uint get_svo_leaf_capacity(RWStructuredBuffer<SVOLeaf> p_leaves) {
+    uint leaf_count;
+    uint stride;
+    p_leaves.GetDimensions(leaf_count, stride);
+    return leaf_count;
+}
 
 /**
  * @brief Selects one of eight sectors in parent-local coordinates.
@@ -197,7 +251,7 @@ bool is_svo_leaf_occupied(uint p_leaf_index,
  * @details p_trace_info.node_index is a static node index; p_trace_info.index_type is ignored. Node descriptions are
  * read without synchronization, so they must not change during the calling pass.
  */
-void traverse_static_svo(RWStructuredBuffer<SVONode> p_nodes, inout SVONodeTraceInfo p_trace_info) {
+void traverse_static_svo(StructuredBuffer<SVONode> p_nodes, inout SVONodeTraceInfo p_trace_info) {
     uint node_index = p_trace_info.node_index;
     uint curr_depth = p_trace_info.curr_depth;
     for (int depth = 0; p_trace_info.remain_depth < 0 || depth < p_trace_info.remain_depth; ++depth) {
@@ -229,49 +283,32 @@ void traverse_static_svo(RWStructuredBuffer<SVONode> p_nodes, inout SVONodeTrace
  * them. It stops at EMPTY, ALLOCATING, ALLOCATING_DYNAMIC, unoccupied leaves, leaves, or when remain_depth steps are
  * exhausted, leaving p_trace_info at the last reached node or leaf with remain_depth reduced by the steps taken. Node
  * descriptions are read without synchronization, so they must not change during the calling pass.
- * @param p_nodes Static SVO node storage.
- * @param p_dynamic_nodes Dynamic SVO node storage; read only when p_traverse_dynamic is true.
- * @param p_tree_info Tree info supplying the virtual offset of dynamic node blocks.
+ * @param p_nodes SVO node storage: the static nodes followed by the dynamic nodes.
  * @param p_traverse_dynamic Whether to follow dynamic children.
  * @param p_trace_info Traversal state, updated in place.
  */
-void traverse_svo(RWStructuredBuffer<SVONode> p_nodes,
-    RWStructuredBuffer<SVONode> p_dynamic_nodes,
-    SVOInfo p_tree_info,
-    bool p_traverse_dynamic,
-    inout SVONodeTraceInfo p_trace_info) {
+void traverse_svo(StructuredBuffer<SVONode> p_nodes, bool p_traverse_dynamic, inout SVONodeTraceInfo p_trace_info) {
     uint node_index = p_trace_info.node_index;
     SVONodeTraceInfo::IndexType index_type = p_trace_info.index_type;
     uint curr_depth = p_trace_info.curr_depth;
     int depth = 0;
     for (; p_trace_info.remain_depth < 0 || depth < p_trace_info.remain_depth; ++depth) {
-        if (index_type == SVONodeTraceInfo::IndexType::STATIC_LEAF ||
-            index_type == SVONodeTraceInfo::IndexType::DYNAMIC_LEAF) {
+        if (index_type == SVONodeTraceInfo::IndexType::LEAF) {
             // Leaves have no children.
             break;
         }
-        SVONode node;
-        if (index_type == SVONodeTraceInfo::IndexType::STATIC_NODE) {
-            node = p_nodes[node_index];
-        } else {
-            node = p_dynamic_nodes[node_index];
-        }
+        SVONode node = p_nodes[node_index];
         uint sector = get_svo_node_subregion(p_trace_info.svo_position);
         bool is_occupied = (node.children_data & (1u << (SVO_CHILDREN_OCCUPANCY_SHIFT + sector))) != 0;
         uint children_index = get_svo_children_index(node);
         SVONode::ChildrenState children_state = get_svo_children_state(node);
-        if (children_state == SVONode::ChildrenState::NODE) {
-            index_type = SVONodeTraceInfo::IndexType::STATIC_NODE;
+        if (children_state == SVONode::ChildrenState::NODE ||
+            (children_state == SVONode::ChildrenState::NODE_DYNAMIC && p_traverse_dynamic)) {
             node_index = children_index + sector;
-        } else if (children_state == SVONode::ChildrenState::NODE_DYNAMIC && p_traverse_dynamic) {
-            // NODE_DYNAMIC block indices are virtual, offset by the static node capacity.
-            index_type = SVONodeTraceInfo::IndexType::DYNAMIC_NODE;
-            node_index = children_index - p_tree_info.max_node_count + sector;
-        } else if (children_state == SVONode::ChildrenState::LEAF && is_occupied) {
-            index_type = SVONodeTraceInfo::IndexType::STATIC_LEAF;
-            node_index = children_index + sector;
-        } else if (children_state == SVONode::ChildrenState::LEAF_DYNAMIC && p_traverse_dynamic && is_occupied) {
-            index_type = SVONodeTraceInfo::IndexType::DYNAMIC_LEAF;
+        } else if ((children_state == SVONode::ChildrenState::LEAF ||
+                       (children_state == SVONode::ChildrenState::LEAF_DYNAMIC && p_traverse_dynamic)) &&
+            is_occupied) {
+            index_type = SVONodeTraceInfo::IndexType::LEAF;
             node_index = children_index + sector;
         } else {
             // Traced to an empty/allocating node, an unoccupied leaf, or a dynamic child not being followed.

@@ -65,7 +65,8 @@ class TextureCompilerPyKTX(TextureCompiler):
         self._native_library.ktxTexture2_Destroy.argtypes = [ctypes.c_void_p]
         self._native_library.ktxTexture2_Destroy.restype = None
 
-    def _load_pyktx(self) -> Any:
+    def load_pyktx(self) -> Any:
+        """Load libktx and the pyktx module once, and return the module. Thread-safe."""
         with self._initialization_lock:
             if self._pyktx is not None:
                 return self._pyktx
@@ -91,7 +92,8 @@ class TextureCompilerPyKTX(TextureCompiler):
                     return
         p_texture.compress_basis(p_parameters)
 
-    def _destroy_texture(self, p_pyktx: Any, p_texture: Any) -> None:
+    def destroy_texture(self, p_pyktx: Any, p_texture: Any) -> None:
+        """Destroy a pyktx texture through the loaded libktx and leave it empty."""
         texture_pointer = p_texture._ptr
         if texture_pointer == p_pyktx.native.ffi.NULL:
             return
@@ -148,7 +150,7 @@ class TextureCompilerPyKTX(TextureCompiler):
             thread_count = min(16, os.cpu_count() or 1)
         if not isinstance(thread_count, int) or thread_count < 1:
             raise ValueError("Texture thread_count must be a positive integer.")
-        pyktx = self._load_pyktx()
+        pyktx = self.load_pyktx()
         try:
             import numpy
             from PIL import Image
@@ -233,7 +235,7 @@ class TextureCompilerPyKTX(TextureCompiler):
             texture.write_to_named_file(temporary_path.as_posix())
             os.replace(temporary_path, p_request.destination_path)
         finally:
-            self._destroy_texture(pyktx, texture)
+            self.destroy_texture(pyktx, texture)
 
 
 class WBEACPCompilerTexture(WBEACPCompiler):

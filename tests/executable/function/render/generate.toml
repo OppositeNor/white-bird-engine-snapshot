@@ -1,0 +1,52 @@
+# Copyright 2026 OppositeNor
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[[generate]]
+output_name = "executable_test.gen.cmake"
+template = "executable_test.cmake.jinja"
+
+[generate.data]
+name = "wbe_render_test"
+
+[[generate.data.exes]]
+name = "vulkan_draw_cube_unshaded_test"
+sources = ["vulkan_draw_cube_unshaded_test.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_draw_material_variants_test"
+sources = ["vulkan_draw_material_variants_test.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_draw_sponza_deferred_test"
+sources = ["deferred_test/*", "entity_draw_data.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_draw_cube_test"
+sources = ["vulkan_draw_cube_test.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_draw_triangle_test"
+sources = ["vulkan_draw_triangle_test.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_draw_sponza_test"
+sources = ["vulkan_draw_sponza_test.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_pixel_sorting_test"
+sources = ["vulkan_pixel_sorting_test.cpp"]
+
+[[generate.data.exes]]
+name = "vulkan_draw_skinned_mesh_test"
+sources = ["vulkan_draw_skinned_mesh_test.cpp"]

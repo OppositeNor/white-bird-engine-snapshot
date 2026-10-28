@@ -156,6 +156,51 @@ TEST(WBEMeshDrawBatchPlannerVKTest, SplitsAtDeviceDrawLimit) {
     EXPECT_EQ(last.vertex_buffer_offsets[0] + static_cast<size_t>(result.commands[2].vertexOffset) * 12, 72U);
 }
 
+TEST(WBEMeshDrawBatchPlannerVKTest, SeparatesPipelineVariantsAndGroupsEqualVariants) {
+    StackAllocator storage(WBE_KI_B(16));
+    RenderAllocator allocator(WBE_KI_B(128));
+    std::array submeshes{make_batch_submesh(storage, 0, 0), make_batch_submesh(storage, 36, 12), make_batch_submesh(storage, 72, 24)};
+    std::array<MeshDrawBatchPlannerVK::Draw, 3> draws;
+    for (size_t i = 0; i < draws.size(); ++i) {
+        draws[i].vertex_bindings = submeshes[i].get_vertex_bindings();
+        draws[i].indices = submeshes[i].indices;
+        draws[i].instance_count = 1;
+        draws[i].first_instance = static_cast<uint32_t>(i);
+    }
+    draws[1].pipeline_variant = "tinted";
+    auto result = MeshDrawBatchPlannerVK().build(&allocator, draws, 100);
+    ASSERT_EQ(result.commands.size(), 3U);
+    ASSERT_EQ(result.batches.size(), 2U);
+    EXPECT_EQ(result.batches[0].pipeline_variant, MATERIAL_PIPELINE_VARIANT_DEFAULT);
+    EXPECT_EQ(result.batches[0].draw_count, 2U);
+    EXPECT_EQ(result.batches[1].pipeline_variant, "tinted");
+    EXPECT_EQ(result.batches[1].first_draw, 2U);
+    EXPECT_EQ(result.batches[1].draw_count, 1U);
+    EXPECT_EQ(result.commands[0].firstInstance, 0U);
+    EXPECT_EQ(result.commands[1].firstInstance, 2U);
+    EXPECT_EQ(result.commands[2].firstInstance, 1U);
+}
+
+TEST(WBEMeshDrawBatchPlannerVKTest, TakesSubmeshPipelineVariantsFromMaterials) {
+    StackAllocator storage(WBE_KI_B(16));
+    RenderAllocator allocator(WBE_KI_B(128));
+    constexpr std::string_view TINTED = "tinted";
+    MemID variant_memory = storage.allocate(TINTED.size() + 1);
+    auto* variant_data = static_cast<char*>(storage.get(variant_memory));
+    std::memcpy(variant_data, TINTED.data(), TINTED.size());
+    variant_data[TINTED.size()] = '\0';
+    MemID material_memory = storage.allocate(sizeof(RUMaterial));
+    auto* tinted_material = std::construct_at(static_cast<RUMaterial*>(storage.get(material_memory)));
+    tinted_material->pipeline_variant = RefRes<char>(variant_memory, &storage);
+    std::array submeshes{make_batch_submesh(storage, 0, 0), make_batch_submesh(storage, 36, 12)};
+    submeshes[1].material = RefRes<RUMaterial>(material_memory, &storage);
+    const std::array<uint32_t, 2> first_instances{0, 1};
+    auto result = MeshDrawBatchPlannerVK().build(&allocator, submeshes, first_instances, 100);
+    ASSERT_EQ(result.batches.size(), 2U);
+    EXPECT_EQ(result.batches[0].pipeline_variant, MATERIAL_PIPELINE_VARIANT_DEFAULT);
+    EXPECT_EQ(result.batches[1].pipeline_variant, TINTED);
+}
+
 TEST(WBEMeshDrawBatchPlannerVKTest, SeparatesDifferentAttributeOffsetsAndUnalignedViewOrigins) {
     StackAllocator storage(WBE_KI_B(16));
     RenderAllocator allocator(WBE_KI_B(128));

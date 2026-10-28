@@ -15,6 +15,7 @@
 #include "function/render/render_resource_unit.hh"
 #include "function/render/vertex_attribute_format_info.hh"
 #include "glm/common.hpp"
+#include "glm/gtc/packing.hpp"
 #include "glm/ext/vector_float2.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/ext/vector_float3.hpp"
@@ -31,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ktx.h>
 #include <format>
 #include <limits>
 #include <optional>
@@ -168,6 +170,31 @@ void set_vertex_attribute_value(
         throw std::runtime_error(std::format("Failed to set vertex attribute '{}': target storage is out of bounds.", p_role));
     }
     std::memcpy(get_binary_view_data(vertex_data.binary, "vertex data") + vertex_offset + attribute.offset, &p_value, sizeof(TValue));
+}
+
+// KTX 2 stores Vulkan format values; 76 is VK_FORMAT_R16_SFLOAT.
+constexpr uint32_t KTX_VK_FORMAT_R16_SFLOAT = 76;
+
+const ktxTexture2& get_sdf_texture(const RUSDF& p_sdf) {
+    if (p_sdf.texture == nullptr) {
+        throw std::runtime_error("Failed to access SDF texture: the texture is missing.");
+    }
+    const ktxTexture2* texture = p_sdf.texture->texture.get();
+    if (texture == nullptr) {
+        throw std::runtime_error("Failed to access SDF texture: the texture is not loaded.");
+    }
+    if (texture->numDimensions != 3) {
+        throw std::runtime_error(
+            std::format("Failed to access SDF texture: it has {} dimensions, not 3.", texture->numDimensions));
+    }
+    if (texture->vkFormat != KTX_VK_FORMAT_R16_SFLOAT) {
+        throw std::runtime_error(
+            std::format("Failed to access SDF texture: its format {} is not VK_FORMAT_R16_SFLOAT.", texture->vkFormat));
+    }
+    if (texture->pData == nullptr) {
+        throw std::runtime_error("Failed to access SDF texture: its image data is not loaded.");
+    }
+    return *texture;
 }
 } // namespace
 
@@ -378,6 +405,38 @@ RUSkeleton::Joint RUSkeleton::get_joint(size_t p_index) const {
             "Failed to read skeleton joint {}: its parent_index {} does not precede it.", p_index, result.parent_index));
     }
     return result;
+}
+
+glm::uvec3 RUSDF::get_extent() const {
+    const ktxTexture2& texture = get_sdf_texture(*this);
+    return glm::uvec3(texture.baseWidth, texture.baseHeight, texture.baseDepth);
+}
+
+float RUSDF::get_sample(const glm::uvec3& p_coordinate) const {
+    const ktxTexture2& texture = get_sdf_texture(*this);
+    if (p_coordinate.x >= texture.baseWidth) {
+        throw std::runtime_error(
+            std::format("Failed to read SDF sample: x {} is outside the width {}.", p_coordinate.x, texture.baseWidth));
+    }
+    if (p_coordinate.y >= texture.baseHeight) {
+        throw std::runtime_error(
+            std::format("Failed to read SDF sample: y {} is outside the height {}.", p_coordinate.y, texture.baseHeight));
+    }
+    if (p_coordinate.z >= texture.baseDepth) {
+        throw std::runtime_error(
+            std::format("Failed to read SDF sample: z {} is outside the depth {}.", p_coordinate.z, texture.baseDepth));
+    }
+    // Each depth slice of a 3D KTX image is a separate image.
+    ktx_size_t slice_offset = 0;
+    auto* base_texture = reinterpret_cast<ktxTexture*>(const_cast<ktxTexture2*>(&texture));
+    const KTX_error_code result = ktxTexture_GetImageOffset(base_texture, 0, 0, p_coordinate.z, &slice_offset);
+    if (result != KTX_SUCCESS) {
+        throw std::runtime_error(std::format("Failed to read SDF sample: {}.", ktxErrorString(result)));
+    }
+    const size_t texel_index = (static_cast<size_t>(p_coordinate.y) * texture.baseWidth) + p_coordinate.x;
+    uint16_t half_sample = 0;
+    std::memcpy(&half_sample, texture.pData + slice_offset + (texel_index * sizeof(half_sample)), sizeof(half_sample));
+    return glm::unpackHalf1x16(half_sample);
 }
 
 } // namespace WhiteBirdEngine

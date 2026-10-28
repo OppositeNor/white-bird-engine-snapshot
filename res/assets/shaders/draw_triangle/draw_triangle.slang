@@ -20,7 +20,7 @@ struct DrawTrianglePushData {
     float time;
 };
 
-[[vk::push_constant]]
+[vk::push_constant]
 ConstantBuffer<DrawTrianglePushData> push_data;
 
 /**
